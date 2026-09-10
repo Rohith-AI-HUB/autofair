@@ -1,0 +1,97 @@
+:root {
+  /* AutoFair design tokens — source: Pen.dev approved design */
+  --color-navy: #0b1726;
+  --color-navy-2: #13263f;
+  --color-navy-3: #1b3350;
+  --color-teal: #16b8a6;
+  --color-teal-dark: #0e8a7d;
+  --color-teal-bg: #e6f7f4;
+  --color-teal-line: #bfe9e2;
+  --color-teal-bright: #7eddd1;
+  --color-amber: #f4b740;
+  --color-amber-bg: #fff4dd;
+  --color-off-white: #fcfaf7;
+  --color-bg-warm: #f7f5ef;
+  --color-coral: #e85d5d;
+  --color-ink: #0b1726;
+  --color-ink-soft: #333333;
+  --color-muted: #666666;
+  --color-slate-mute: #5c738a;
+  --color-line: #e1e8e5;
+  --color-line-dark: #243b55;
+  --color-card: #ffffff;
+  --color-pale-blue: #d6e2ec;
+  --color-faint-blue: #9fb2c5;
+
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-off-white);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-teal);
+  color: var(--color-navy);
+}
+
+/* Sharp dossier aesthetic — minimal radius, hairline rules */
+.dossier-rule {
+  border-color: var(--color-line);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Subtle transitions only — per approved design */
+a,
+button {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+/* Accordion animation */
+.accordion-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms ease;
+}
+.accordion-panel[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+.accordion-inner {
+  overflow: hidden;
+}
+
+/* Hide scrollbar for ticks but keep accessible */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
