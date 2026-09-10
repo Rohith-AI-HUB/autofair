@@ -1,29 +1,29 @@
-import Image from 'next/image';
+import { ImageCarousel } from '@/components/shared/ImageCarousel';
+
+const PHOTOS = [
+  {
+    src: 'https://images.unsplash.com/photo-1781197824875-c6e07188896b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800',
+    alt: '2022 Hyundai Creta SX — KA-05-MN-4218 in Bangalore, front three-quarter view',
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1670122872487-8fea1dd1c08c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800',
+    alt: '2022 Hyundai Creta SX — side profile showing verified exterior condition',
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1609831489866-3a2fe235f093?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800',
+    alt: '2022 Hyundai Creta SX — rear view with number plate region documented',
+  },
+];
 
 export function PhotoBleed() {
   return (
     <section aria-label="Featured verified vehicle" className="relative overflow-hidden bg-navy">
       <div className="relative h-[560px] w-full md:h-[640px]">
-        <Image
-          src="https://images.unsplash.com/photo-1781197824875-c6e07188896b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800"
-          alt="2022 Hyundai Creta SX — KA-05-MN-4218 in Bangalore, sample dossier vehicle"
-          fill
-          priority
-          className="object-cover"
-          sizes="100vw"
+        <ImageCarousel images={PHOTOS} figLabel="CRETA SX · KA-05-MN-4218 · BANGALORE" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/40"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/40" />
-
-        <p className="absolute left-5 top-5 font-mono text-[10px] tracking-[0.06em] text-white md:left-12">
-          FIG. 01 — CRETA SX · KA-05-MN-4218 · BANGALORE
-        </p>
-
-        <div className="absolute bottom-6 left-5 flex gap-2 md:left-12" aria-hidden>
-          <span className="h-2 w-2 rounded-full bg-amber" />
-          <span className="h-2 w-2 rounded-full bg-white/50" />
-          <span className="h-2 w-2 rounded-full bg-white/50" />
-          <span className="h-2 w-2 rounded-full bg-white/50" />
-        </div>
 
         <div className="absolute inset-x-5 bottom-14 top-auto md:inset-x-auto md:bottom-auto md:right-12 md:top-1/2 md:w-[520px] md:-translate-y-1/2 md:left-auto">
           <div className="border border-white/10 bg-navy p-7">
