@@ -1,0 +1,571 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  Bell,
+  Bookmark,
+  Loader2,
+  Lock,
+  ShieldCheck,
+} from 'lucide-react';
+import { Container } from '@/components/shared/Container';
+import { GoogleMark } from '@/components/auth/GoogleMark';
+import {
+  getBrowserClient,
+  getRememberChoice,
+  getSessionFromAnyStore,
+  getSiteUrl,
+  isSupabaseConfigured,
+  setRememberChoice,
+} from '@/lib/supabase/client';
+
+type Mode = 'signin' | 'signup';
+type View = 'form' | 'forgot' | 'check-email' | 'reset-sent';
+
+const inputCls =
+  'w-full border border-line bg-off-white px-4 py-[15px] font-sans text-[14px] text-navy outline-none placeholder:text-[#9AA8B5] focus:border-teal';
+
+export function AuthExperience() {
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>('signin');
+  const [view, setView] = useState<View>('form');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [busy, setBusy] = useState<'google' | 'email' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [authedEmail, setAuthedEmail] = useState<string | null>(null);
+
+  const configured = isSupabaseConfigured();
+
+  useEffect(() => {
+    setRemember(getRememberChoice());
+    getSessionFromAnyStore().then(({ session }) => {
+      if (session?.user?.email) setAuthedEmail(session.user.email);
+    });
+  }, []);
+
+  function needClient(persist?: 'local' | 'session') {
+    const sb = getBrowserClient(persist ?? (remember ? 'local' : 'session'));
+    if (!sb) {
+      setError(
+        'Auth is not connected yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then reload.'
+      );
+      return null;
+    }
+    return sb;
+  }
+
+  async function continueWithGoogle() {
+    setError(null);
+    setNotice(null);
+    const sb = needClient();
+    if (!sb) return;
+    setRememberChoice(remember);
+    setBusy('google');
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${getSiteUrl()}/auth/callback?next=/`,
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+    if (error) {
+      setError(error.message);
+      setBusy(null);
+    }
+  }
+
+  function validate(): string | null {
+    if (!email.trim()) return 'Enter your email address.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Enter a valid email address.';
+    if (view === 'form' && !password) return 'Enter your password.';
+    if (view === 'form' && password.length < 6) return 'Password must be at least 6 characters.';
+    return null;
+  }
+
+  async function continueWithEmail() {
+    setError(null);
+    setNotice(null);
+    const problem = validate();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    const sb = needClient();
+    if (!sb) return;
+    setRememberChoice(remember);
+    setBusy('email');
+    if (mode === 'signin') {
+      const { error } = await sb.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) {
+        setError(error.message);
+        setBusy(null);
+        return;
+      }
+      router.replace('/');
+      router.refresh();
+    } else {
+      const { data, error } = await sb.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo: `${getSiteUrl()}/auth/callback?next=/` },
+      });
+      setBusy(null);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      if (data.session) {
+        router.replace('/');
+        router.refresh();
+      } else {
+        setView('check-email');
+      }
+    }
+  }
+
+  async function sendResetLink() {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError('Enter your email address first.');
+      return;
+    }
+    const sb = getBrowserClient('local');
+    if (!sb) {
+      setError(
+        'Auth is not connected yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then reload.'
+      );
+      return;
+    }
+    setBusy('email');
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${getSiteUrl()}/auth/update-password`,
+    });
+    setBusy(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setView('reset-sent');
+  }
+
+  async function signOut() {
+    const { persist } = await getSessionFromAnyStore();
+    await getBrowserClient(persist)?.auth.signOut();
+    setAuthedEmail(null);
+    router.refresh();
+  }
+
+  const isSignup = mode === 'signup';
+
+  return (
+    <Container className="pb-16 pt-12">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
+          ACCOUNT&nbsp;&nbsp;•&nbsp;&nbsp;SIGN IN / SIGN UP
+        </p>
+        <p className="font-mono text-[10px] tracking-[0.04em] text-muted">
+          SECURE&nbsp;&nbsp;•&nbsp;&nbsp;SUPABASE AUTH&nbsp;&nbsp;•&nbsp;&nbsp;AF-2026
+        </p>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-sans text-[38px] font-extrabold leading-[1.05] tracking-[-0.02em] text-navy md:text-[60px]">
+            Open your dossier.
+          </h1>
+          <div className="mt-4 h-[5px] w-14 bg-amber" aria-hidden />
+          <p className="mt-4 max-w-[560px] font-sans text-[16px] leading-relaxed text-ink-soft">
+            One account for saved files, faster seller contact and verification alerts.
+            Pick up exactly where you left off.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col gap-3 lg:w-[300px]">
+          <p className="flex items-center gap-2 border border-line bg-white px-[14px] py-[10px] font-mono text-[10px] tracking-[0.04em] text-muted">
+            <Lock size={14} aria-hidden />
+            SOC2&nbsp;&nbsp;•&nbsp;&nbsp;GOOGLE OAUTH
+          </p>
+          <Link
+            href="/contact"
+            className="font-sans text-[13px] font-semibold text-navy hover:underline"
+          >
+            Need help? Contact support →
+          </Link>
+        </div>
+      </div>
+
+      <div className="mt-10 flex flex-col gap-0 lg:flex-row">
+        <aside className="bg-navy p-9 text-white lg:w-[460px] lg:shrink-0">
+          <p className="font-mono text-[10px] tracking-[0.06em] text-teal-bright">
+            FIELD FILE&nbsp;&nbsp;•&nbsp;&nbsp;AF-2026-008421
+          </p>
+          <h2 className="mt-3 font-sans text-[32px] font-extrabold leading-tight text-white">
+            Your garage, verified.
+          </h2>
+          <p className="mt-3 font-sans text-[14px] leading-relaxed text-[#9FB2C5]">
+            Every save, alert and seller reply lives in one verified file. No
+            spreadsheets, no lost links.
+          </p>
+          <div className="my-6 h-px bg-[#1E344F]" aria-hidden />
+          <ul className="space-y-5">
+            {[
+              ['01', 'Save dossiers', 'Bookmark inspection files and revisit the full 82-check report anytime.'],
+              ['02', 'Contact sellers faster', 'Message with a verified profile — replies in ~1 business day.'],
+              ['03', 'Never miss a change', 'Price drops, new documents and verification alerts land first.'],
+            ].map(([n, t, d]) => (
+              <li key={n} className="flex gap-4">
+                <span
+                  aria-hidden
+                  className="flex h-[34px] w-[34px] shrink-0 items-center justify-center border border-teal font-mono text-[11px] text-teal-bright"
+                >
+                  {n}
+                </span>
+                <span>
+                  <span className="block font-sans text-[14px] font-bold text-white">{t}</span>
+                  <span className="mt-1 block font-sans text-[13px] leading-relaxed text-[#D6E2EC]">
+                    {d}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <dl className="mt-8 flex gap-8">
+            {[
+              ['12.4k', 'FILES SAVED'],
+              ['82 / 82', 'CHECKS / FILE'],
+              ['4.9 / 5', 'BUYER RATING'],
+            ].map(([v, l]) => (
+              <div key={l}>
+                <dt className="sr-only">{l}</dt>
+                <dd className="font-sans text-[20px] font-extrabold text-white">{v}</dd>
+                <dd className="mt-1 font-mono text-[9px] tracking-[0.06em] text-[#9FB2C5]">
+                  {l}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <figure className="mt-8 bg-navy-2 p-5">
+            <blockquote className="font-sans text-[14px] font-medium leading-relaxed text-white">
+              “Found my Creta in two days — the dossier told me more than the seller did.”
+            </blockquote>
+            <figcaption className="mt-2 font-mono text-[10px] tracking-[0.04em] text-teal-bright">
+              ROHAN M.&nbsp;&nbsp;•&nbsp;&nbsp;BANGALORE&nbsp;&nbsp;•&nbsp;&nbsp;CRETA SX
+            </figcaption>
+          </figure>
+          <p className="mt-6 font-mono text-[9px] tracking-[0.06em] text-[#9FB2C5]">
+            GOOGLE OAUTH&nbsp;&nbsp;•&nbsp;&nbsp;SUPABASE AUTH&nbsp;&nbsp;•&nbsp;&nbsp;NO
+            PASSWORD STORED
+          </p>
+        </aside>
+
+        <div className="border border-line bg-white p-7 md:p-[28px] md:pb-[33px] lg:flex-1">
+          {authedEmail ? (
+            <div role="status" className="flex h-full flex-col items-start gap-3">
+              <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
+                SIGNED IN
+              </p>
+              <h2 className="font-sans text-[28px] font-extrabold text-navy">
+                Welcome back
+              </h2>
+              <p className="font-sans text-[14px] text-muted">{authedEmail}</p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <Link
+                  href="/cars"
+                  className="bg-navy px-6 py-3 font-sans text-[14px] font-bold text-white hover:bg-navy-2"
+                >
+                  Browse verified cars
+                </Link>
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="border border-navy/30 px-6 py-3 font-sans text-[14px] font-semibold text-navy hover:border-navy"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          ) : view === 'check-email' || view === 'reset-sent' ? (
+            <div role="status" className="flex h-full flex-col items-start gap-3">
+              <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
+                {view === 'check-email' ? 'ACCOUNT CREATED' : 'RESET LINK SENT'}
+              </p>
+              <h2 className="font-sans text-[28px] font-extrabold text-navy">
+                Check your inbox.
+              </h2>
+              <p className="max-w-[420px] font-sans text-[14px] leading-relaxed text-muted">
+                {view === 'check-email'
+                  ? `We sent a confirmation link to ${email.trim()}. Open it to verify your email, then sign in.`
+                  : `We sent a password-reset link to ${email.trim()}. It expires in one hour.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setView('form');
+                  setError(null);
+                }}
+                className="mt-2 font-sans text-[13px] font-bold text-navy hover:underline"
+              >
+                ← Back to sign in
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-sans text-[28px] font-extrabold text-navy">
+                  {view === 'forgot' ? 'Reset password' : 'Welcome back'}
+                </h2>
+                <span className="inline-flex items-center gap-2 bg-[#E6F4F1] px-3 py-2">
+                  <span aria-hidden className="h-2 w-2 rounded-full bg-teal" />
+                  <span className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">
+                    SECURE
+                  </span>
+                </span>
+              </div>
+              <p className="mt-2 font-sans text-[14px] text-muted">
+                {view === 'forgot'
+                  ? 'Enter your account email and we will send a reset link.'
+                  : 'Sign in to open your saved files, alerts and seller threads.'}
+              </p>
+
+              {view === 'form' && (
+                <div role="group" aria-label="Sign in or create account" className="mt-5 flex bg-[#EFEAE3] p-1">
+                  {(['signin', 'signup'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={mode === m}
+                      onClick={() => {
+                        setMode(m);
+                        setError(null);
+                      }}
+                      className={
+                        mode === m
+                          ? 'flex-1 bg-navy px-4 py-3 font-sans text-[14px] font-bold text-white'
+                          : 'flex-1 px-4 py-3 font-sans text-[14px] font-semibold text-navy hover:underline'
+                      }
+                    >
+                      {m === 'signin' ? 'Sign in' : 'Create account'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 space-y-4">
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={continueWithGoogle}
+                  className="flex w-full items-center justify-center gap-[14px] border-[1.5px] border-navy bg-white px-5 py-[14px] font-sans text-[15px] font-semibold text-navy hover:bg-off-white disabled:opacity-60"
+                >
+                  {busy === 'google' ? (
+                    <Loader2 size={20} className="animate-spin" aria-hidden />
+                  ) : (
+                    <GoogleMark size={22} />
+                  )}
+                  Continue with Google
+                </button>
+
+                <div className="flex items-center gap-3" aria-hidden>
+                  <span className="h-px flex-1 bg-line" />
+                  <span className="font-mono text-[10px] tracking-[0.06em] text-muted">
+                    OR WITH EMAIL
+                  </span>
+                  <span className="h-px flex-1 bg-line" />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="auth-email"
+                    className="font-mono text-[10px] tracking-[0.06em] text-muted"
+                  >
+                    EMAIL ADDRESS
+                  </label>
+                  <input
+                    id="auth-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className={`${inputCls} mt-1.5`}
+                  />
+                </div>
+
+                {view === 'form' && (
+                  <>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label
+                          htmlFor="auth-password"
+                          className="font-mono text-[10px] tracking-[0.06em] text-muted"
+                        >
+                          PASSWORD
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setView('forgot');
+                            setError(null);
+                          }}
+                          className="font-sans text-[12px] font-semibold text-teal-dark hover:underline"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                      <div className="relative mt-1.5">
+                        <input
+                          id="auth-password"
+                          type={showPw ? 'text' : 'password'}
+                          autoComplete={isSignup ? 'new-password' : 'current-password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Enter your password"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') continueWithEmail();
+                          }}
+                          className={`${inputCls} pr-16`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPw((v) => !v)}
+                          aria-pressed={showPw}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[11px] text-teal-dark hover:underline"
+                        >
+                          {showPw ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={remember}
+                        onClick={() => setRemember((v) => !v)}
+                        className="flex items-center gap-2"
+                      >
+                        <span
+                          aria-hidden
+                          className={
+                            remember
+                              ? 'flex h-[18px] w-[18px] items-center justify-center bg-navy font-sans text-[11px] font-extrabold text-white'
+                              : 'h-[18px] w-[18px] border border-navy/40 bg-white'
+                          }
+                        >
+                          {remember ? '✓' : ''}
+                        </span>
+                        <span className="font-sans text-[13px] font-medium text-navy">
+                          Keep me signed in
+                        </span>
+                      </button>
+                      <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted">
+                        <Lock size={12} aria-hidden />
+                        Encrypted
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {error && (
+                  <p
+                    role="alert"
+                    className="border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]"
+                  >
+                    {error}
+                  </p>
+                )}
+                {notice && (
+                  <p
+                    role="status"
+                    className="border border-teal-line bg-teal-bg px-4 py-3 font-sans text-[13px] font-semibold text-teal-dark"
+                  >
+                    {notice}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={view === 'forgot' ? sendResetLink : continueWithEmail}
+                  className="w-full bg-navy px-6 py-4 font-sans text-[15px] font-bold text-white hover:bg-navy-2 disabled:opacity-60"
+                >
+                  {busy === 'email' ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 size={18} className="animate-spin" aria-hidden />
+                      Working…
+                    </span>
+                  ) : view === 'forgot' ? (
+                    'Send reset link  →'
+                  ) : (
+                    'Continue  →'
+                  )}
+                </button>
+
+                {view === 'forgot' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('form');
+                      setError(null);
+                    }}
+                    className="font-sans text-[13px] font-bold text-navy hover:underline"
+                  >
+                    ← Back to sign in
+                  </button>
+                ) : (
+                  <p className="font-mono text-[10px] leading-relaxed text-muted">
+                    Protected by Google OAuth via Supabase Auth. We never see or store
+                    your password.
+                  </p>
+                )}
+              </div>
+
+              {view === 'form' && (
+                <>
+                  <div className="mt-5 flex flex-wrap items-center gap-2 bg-[#F6F1EA] px-5 py-[14px]">
+                    <span className="font-sans text-[13px] text-muted">
+                      {isSignup ? 'Already have an account?' : 'New to Autofair?'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode(isSignup ? 'signin' : 'signup');
+                        setError(null);
+                      }}
+                      className="font-sans text-[13px] font-bold text-navy hover:underline"
+                    >
+                      {isSignup ? 'Sign in →' : 'Create an account →'}
+                    </button>
+                  </div>
+                  <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
+                    {[
+                      { icon: ShieldCheck, label: 'VERIFIED SELLERS' },
+                      { icon: Bell, label: 'INSTANT ALERTS' },
+                      { icon: Bookmark, label: 'SAVED FILES' },
+                    ].map(({ icon: Icon, label }) => (
+                      <span key={label} className="flex items-center gap-1.5">
+                        <Icon size={13} aria-hidden className="text-muted" />
+                        <span className="font-mono text-[9px] tracking-[0.06em] text-muted">
+                          {label}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </Container>
+  );
+}

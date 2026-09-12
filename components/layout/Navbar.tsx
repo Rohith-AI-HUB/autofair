@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
+import { AuthButton } from '@/components/auth/AuthButton';
 
 const links = [
   { label: 'Buy Cars', href: '/cars' },
@@ -39,6 +40,7 @@ export function Navbar() {
         </div>
 
         <div className="hidden items-center gap-3 lg:flex">
+          <AuthButton />
           <Link
             href="/cars"
             className="bg-teal px-5 py-3 font-sans text-[14px] font-bold text-navy hover:bg-[#12a295]"
@@ -78,6 +80,7 @@ export function Navbar() {
               </Link>
             ))}
             <div className="mt-4 flex flex-col gap-2">
+              <AuthButton onNavigate={() => setOpen(false)} />
               <Link
                 href="/cars"
                 onClick={() => setOpen(false)}
