@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { cars } from '@/lib/data/cars';
 import { CarCard } from '@/components/cars/CarCard';
@@ -11,6 +11,7 @@ type SortKey = 'newest' | 'price-asc' | 'price-desc' | 'km-asc' | 'score-desc';
 const makes = ['All', 'Hyundai', 'Maruti', 'Honda', 'Tata', 'Kia'];
 const fuels = ['All', 'Petrol', 'Diesel'];
 const transmissions = ['All', 'Manual', 'Automatic', 'AMT'];
+const cities = ['All', ...Array.from(new Set(cars.map((c) => c.location)))];
 const priceBands = [
   { label: 'All prices', min: 0, max: Infinity },
   { label: 'Under ₹8L', min: 0, max: 800000 },
@@ -28,6 +29,24 @@ export function CarsExplorer() {
   const [make, setMake] = useState('All');
   const [fuel, setFuel] = useState('All');
   const [gear, setGear] = useState('All');
+  const [city, setCity] = useState(() => {
+    if (typeof window === 'undefined') return 'All';
+    try {
+      const saved = window.localStorage.getItem('autofair-city');
+      if (saved && cities.includes(saved)) return saved;
+    } catch {
+      /* storage unavailable */
+    }
+    return 'All';
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('autofair-city', city);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [city]);
   const [priceIdx, setPriceIdx] = useState(0);
   const [yearIdx, setYearIdx] = useState(0);
   const [sort, setSort] = useState<SortKey>('newest');
@@ -41,6 +60,7 @@ export function CarsExplorer() {
       if (make !== 'All' && c.make !== make) return false;
       if (fuel !== 'All' && c.fuel !== fuel) return false;
       if (gear !== 'All' && c.transmission !== gear) return false;
+      if (city !== 'All' && c.location !== city) return false;
       if (c.price < band.min || c.price > band.max) return false;
       if (c.year < yb.min) return false;
       if (q) {
@@ -66,7 +86,7 @@ export function CarsExplorer() {
         list = [...list].sort((a, b) => b.year - a.year);
     }
     return list;
-  }, [query, make, fuel, gear, priceIdx, yearIdx, sort]);
+  }, [query, make, fuel, gear, city, priceIdx, yearIdx, sort]);
 
   const filterPanel = (
     <div className="flex flex-col gap-5">
@@ -93,6 +113,15 @@ export function CarsExplorer() {
           {transmissions.map((t) => (
             <FilterPill key={t} active={gear === t} onClick={() => setGear(t)}>
               {t}
+            </FilterPill>
+          ))}
+        </div>
+      </FilterGroup>
+      <FilterGroup label="City">
+        <div className="flex flex-wrap gap-2">
+          {cities.map((c) => (
+            <FilterPill key={c} active={city === c} onClick={() => setCity(c)}>
+              {c}
             </FilterPill>
           ))}
         </div>
@@ -204,6 +233,7 @@ export function CarsExplorer() {
                   setMake('All');
                   setFuel('All');
                   setGear('All');
+                  setCity('All');
                   setPriceIdx(0);
                   setYearIdx(0);
                 }}

@@ -33,7 +33,7 @@ export default function UpdatePasswordPage() {
     }
     setDone(true);
     window.setTimeout(() => {
-      router.replace('/');
+      router.replace('/my-listings');
       router.refresh();
     }, 1500);
   }

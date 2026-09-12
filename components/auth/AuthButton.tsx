@@ -39,9 +39,9 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
   if (email) {
     return (
       <Link
-        href="/auth"
+        href="/my-listings"
         onClick={onNavigate}
-        aria-label={`Account — signed in as ${email}`}
+        aria-label={`My garage — signed in as ${email}`}
         title={email}
         className="flex h-9 w-9 items-center justify-center rounded-full bg-navy font-sans text-[14px] font-bold text-white hover:bg-navy-2"
       >

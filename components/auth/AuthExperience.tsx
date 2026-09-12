@@ -70,7 +70,7 @@ export function AuthExperience() {
     const { error } = await sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${getSiteUrl()}/auth/callback?next=/`,
+        redirectTo: `${getSiteUrl()}/auth/callback?next=/my-listings`,
         queryParams: { prompt: 'select_account' },
       },
     });
@@ -110,13 +110,13 @@ export function AuthExperience() {
         setBusy(null);
         return;
       }
-      router.replace('/');
+      router.replace('/my-listings');
       router.refresh();
     } else {
       const { data, error } = await sb.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: `${getSiteUrl()}/auth/callback?next=/` },
+        options: { emailRedirectTo: `${getSiteUrl()}/auth/callback?next=/my-listings` },
       });
       setBusy(null);
       if (error) {
@@ -124,7 +124,7 @@ export function AuthExperience() {
         return;
       }
       if (data.session) {
-        router.replace('/');
+        router.replace('/my-listings');
         router.refresh();
       } else {
         setView('check-email');
@@ -279,10 +279,10 @@ export function AuthExperience() {
               <p className="font-sans text-[14px] text-muted">{authedEmail}</p>
               <div className="mt-2 flex flex-wrap gap-3">
                 <Link
-                  href="/cars"
+                  href="/my-listings"
                   className="bg-navy px-6 py-3 font-sans text-[14px] font-bold text-white hover:bg-navy-2"
                 >
-                  Browse verified cars
+                  Open my garage
                 </Link>
                 <button
                   type="button"

@@ -13,7 +13,7 @@ function CallbackHandler() {
 
   useEffect(() => {
     const code = params.get('code');
-    const next = params.get('next') ?? '/';
+    const next = params.get('next') ?? '/my-listings';
     if (!code) {
       setError('This sign-in link is invalid or has expired. Start again from the sign-in page.');
       return;

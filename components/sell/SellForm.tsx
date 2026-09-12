@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, ImagePlus } from 'lucide-react';
 import { Container } from '@/components/shared/Container';
+import { cn } from '@/lib/utils';
 
 type Fields = {
   reg: string;
@@ -25,17 +27,93 @@ const initial: Fields = {
   location: '',
 };
 
+interface Photo {
+  id: string;
+  url: string;
+  name: string;
+}
+
+const MAX_PHOTOS = 10;
+const MAX_MB = 5;
+const ACCEPTED = ['image/jpeg', 'image/png'];
+
+let photoSeq = 0;
+
 export function SellForm() {
   const [f, setF] = useState<Fields>(initial);
-  const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof Fields | 'photos', string>>>({});
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const [done, setDone] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [scrollPct, setScrollPct] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      setPhotos((ps) => {
+        ps.forEach((p) => URL.revokeObjectURL(p.url));
+        return ps;
+      });
+    };
+  }, []);
 
   function set<K extends keyof Fields>(k: K, v: string) {
     setF((p) => ({ ...p, [k]: v }));
   }
 
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    setErrors((e) => ({ ...e, photos: undefined }));
+    const incoming = Array.from(list);
+    const problems: string[] = [];
+    const accepted: Photo[] = [];
+    for (const file of incoming) {
+      if (!ACCEPTED.includes(file.type)) {
+        problems.push(`${file.name}: only JPG / PNG.`);
+        continue;
+      }
+      if (file.size > MAX_MB * 1024 * 1024) {
+        problems.push(`${file.name}: over ${MAX_MB}MB.`);
+        continue;
+      }
+      accepted.push({ id: `p${++photoSeq}`, url: URL.createObjectURL(file), name: file.name });
+    }
+    setPhotos((ps) => {
+      const room = MAX_PHOTOS - ps.length;
+      if (room <= 0) {
+        problems.push(`Maximum ${MAX_PHOTOS} photos.`);
+        if (problems.length) setErrors((e) => ({ ...e, photos: problems.join(' ') }));
+        return ps;
+      }
+      const take = accepted.slice(0, room);
+      if (accepted.length > room) problems.push(`Maximum ${MAX_PHOTOS} photos — extras skipped.`);
+      if (problems.length) setErrors((e) => ({ ...e, photos: problems.join(' ') }));
+      return [...ps, ...take];
+    });
+  }
+
+  function removePhoto(id: string) {
+    setPhotos((ps) => {
+      const target = ps.find((p) => p.id === id);
+      if (target) URL.revokeObjectURL(target.url);
+      return ps.filter((p) => p.id !== id);
+    });
+  }
+
+  function onStripScroll() {
+    const el = stripRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setScrollPct(max > 0 ? el.scrollLeft / max : 0);
+  }
+
+  function nudge(dir: 1 | -1) {
+    stripRef.current?.scrollBy({ left: dir * 280, behavior: 'smooth' });
+  }
+
   function validate() {
-    const e: Partial<Record<keyof Fields, string>> = {};
+    const e: Partial<Record<keyof Fields | 'photos', string>> = {};
     if (!f.reg.trim()) e.reg = 'Registration number is required.';
     if (!f.make.trim()) e.make = 'Make is required.';
     if (!f.model.trim()) e.model = 'Model is required.';
@@ -50,6 +128,7 @@ export function SellForm() {
     if (!f.km.trim()) e.km = 'Kilometres required.';
     else if (!/^\d+$/.test(f.km.replace(/,/g, ''))) e.km = 'Digits only.';
     if (!f.location.trim()) e.location = 'City is required.';
+    if (photos.length === 0) e.photos = 'Add at least 1 photo.';
     return e;
   }
 
@@ -62,14 +141,16 @@ export function SellForm() {
         </h2>
         <p className="mt-2 max-w-[520px] font-sans text-[14px] leading-relaxed text-muted">
           AutoFair will review the information ({f.reg.toUpperCase()} · {f.make}{' '}
-          {f.model}). Nothing was sent to a backend — this is a frontend prototype.
-          Next step in production: physical verification and document review.
+          {f.model} · {photos.length} photo{photos.length === 1 ? '' : 's'}). Nothing
+          was sent to a backend — this is a frontend prototype. Next step in
+          production: physical verification and document review.
         </p>
         <button
           type="button"
           onClick={() => {
             setDone(false);
             setF(initial);
+            setPhotos([]);
           }}
           className="mt-5 border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy"
         >
@@ -79,8 +160,9 @@ export function SellForm() {
     );
   }
 
-  const inputCls =
-    'w-full border border-line bg-off-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal';
+  const textCls =
+    'w-full border border-line bg-off-white px-[18px] py-4 font-sans text-[16px] text-navy outline-none placeholder:text-[#A8B0B8] focus:border-teal';
+  const left = MAX_PHOTOS - photos.length;
 
   return (
     <form
@@ -91,145 +173,322 @@ export function SellForm() {
         setErrors(v);
         if (Object.keys(v).length === 0) setDone(true);
       }}
-      className="border border-line bg-white p-6 md:p-8"
+      className="border border-line bg-white p-6 md:p-10"
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label htmlFor="sell-reg" className="font-mono text-[10px] text-muted">
-            REGISTRATION NUMBER *
-          </label>
-          <input
+      <div className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
             id="sell-reg"
+            label="REGISTRATION NUMBER *"
             value={f.reg}
-            onChange={(e) => set('reg', e.target.value)}
+            onChange={(v) => set('reg', v)}
             placeholder="KA-05-MN-4218"
-            className={`${inputCls} mt-1.5 font-mono`}
-            aria-invalid={!!errors.reg}
+            mono
+            error={errors.reg}
+            className={textCls}
           />
-          <Err msg={errors.reg} />
-        </div>
-        <div>
-          <label htmlFor="sell-location" className="font-mono text-[10px] text-muted">
-            CITY / LOCATION *
-          </label>
-          <input
+          <TextField
             id="sell-location"
+            label="CITY / LOCATION *"
             value={f.location}
-            onChange={(e) => set('location', e.target.value)}
+            onChange={(v) => set('location', v)}
             placeholder="Bangalore"
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.location}
+            error={errors.location}
+            className={textCls}
           />
-          <Err msg={errors.location} />
         </div>
-        <div>
-          <label htmlFor="sell-make" className="font-mono text-[10px] text-muted">
-            MAKE *
-          </label>
-          <input
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
             id="sell-make"
+            label="MAKE *"
             value={f.make}
-            onChange={(e) => set('make', e.target.value)}
+            onChange={(v) => set('make', v)}
             placeholder="Hyundai"
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.make}
+            error={errors.make}
+            className={textCls}
           />
-          <Err msg={errors.make} />
-        </div>
-        <div>
-          <label htmlFor="sell-model" className="font-mono text-[10px] text-muted">
-            MODEL *
-          </label>
-          <input
+          <TextField
             id="sell-model"
+            label="MODEL *"
             value={f.model}
-            onChange={(e) => set('model', e.target.value)}
+            onChange={(v) => set('model', v)}
             placeholder="Creta SX"
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.model}
+            error={errors.model}
+            className={textCls}
           />
-          <Err msg={errors.model} />
         </div>
-        <div>
-          <label htmlFor="sell-year" className="font-mono text-[10px] text-muted">
-            YEAR *
-          </label>
-          <input
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
             id="sell-year"
+            label="YEAR *"
             value={f.year}
-            onChange={(e) => set('year', e.target.value)}
+            onChange={(v) => set('year', v)}
             placeholder="2022"
             inputMode="numeric"
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.year}
+            error={errors.year}
+            className={textCls}
           />
-          <Err msg={errors.year} />
-        </div>
-        <div>
-          <label htmlFor="sell-km" className="font-mono text-[10px] text-muted">
-            KILOMETRES *
-          </label>
-          <input
+          <TextField
             id="sell-km"
+            label="KILOMETRES *"
             value={f.km}
-            onChange={(e) => set('km', e.target.value)}
+            onChange={(v) => set('km', v)}
             placeholder="42180"
             inputMode="numeric"
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.km}
+            error={errors.km}
+            className={textCls}
           />
-          <Err msg={errors.km} />
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="sell-fuel" className="font-mono text-[11px] tracking-[0.06em] text-muted">
+              FUEL *
+            </label>
+            <div className="relative mt-1.5">
+              <select
+                id="sell-fuel"
+                value={f.fuel}
+                onChange={(e) => set('fuel', e.target.value)}
+                aria-invalid={!!errors.fuel}
+                className="w-full appearance-none border border-line bg-white px-[18px] py-4 pr-12 font-sans text-[16px] text-navy outline-none focus:border-teal"
+              >
+                <option value="">Select...</option>
+                <option>Petrol</option>
+                <option>Diesel</option>
+                <option>CNG</option>
+                <option>Electric</option>
+                <option>Hybrid</option>
+              </select>
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className="pointer-events-none absolute right-[18px] top-1/2 -translate-y-1/2 text-[#1A1A1A]"
+              />
+            </div>
+            <Err msg={errors.fuel} />
+          </div>
+          <div>
+            <label htmlFor="sell-gear" className="font-mono text-[11px] tracking-[0.06em] text-muted">
+              TRANSMISSION *
+            </label>
+            <div className="relative mt-1.5">
+              <select
+                id="sell-gear"
+                value={f.transmission}
+                onChange={(e) => set('transmission', e.target.value)}
+                aria-invalid={!!errors.transmission}
+                className="w-full appearance-none border border-line bg-white px-[18px] py-4 pr-12 font-sans text-[16px] text-navy outline-none focus:border-teal"
+              >
+                <option value="">Select...</option>
+                <option>Manual</option>
+                <option>Automatic</option>
+                <option>AMT</option>
+                <option>CVT</option>
+              </select>
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className="pointer-events-none absolute right-[18px] top-1/2 -translate-y-1/2 text-[#1A1A1A]"
+              />
+            </div>
+            <Err msg={errors.transmission} />
+          </div>
+        </div>
+
         <div>
-          <label htmlFor="sell-fuel" className="font-mono text-[10px] text-muted">
-            FUEL *
-          </label>
-          <select
-            id="sell-fuel"
-            value={f.fuel}
-            onChange={(e) => set('fuel', e.target.value)}
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.fuel}
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="font-mono text-[11px] tracking-[0.06em] text-muted" id="photos-label">
+              PHOTOS *
+            </p>
+            <p className="font-mono text-[10px] tracking-[0.04em] text-[#9FB2C5]">
+              UP TO 10&nbsp;&nbsp;•&nbsp;&nbsp;FIRST = COVER
+            </p>
+          </div>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-labelledby="photos-label"
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') fileRef.current?.click();
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              addFiles(e.dataTransfer.files);
+            }}
+            className={cn(
+              'mt-1.5 flex flex-col items-center gap-3 border-[1.5px] border-dashed p-6 text-center',
+              dragOver ? 'border-teal bg-teal-bg' : 'border-teal-dark bg-[#F2FAF9]'
+            )}
           >
-            <option value="">Select…</option>
-            <option>Petrol</option>
-            <option>Diesel</option>
-            <option>CNG</option>
-            <option>Electric</option>
-            <option>Hybrid</option>
-          </select>
-          <Err msg={errors.fuel} />
+            <ImagePlus size={24} aria-hidden className="text-navy" />
+            <p className="font-sans text-[14px] font-semibold text-navy">
+              Drag photos here or
+            </p>
+            <span className="bg-navy px-5 py-[10px] font-sans text-[13px] font-bold text-white">
+              Browse files
+            </span>
+            <p className="font-mono text-[10px] tracking-[0.02em] text-muted">
+              JPG / PNG&nbsp;&nbsp;•&nbsp;&nbsp;max 5MB each&nbsp;&nbsp;•&nbsp;&nbsp;exterior,
+              interior, cluster, tyres
+            </p>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            multiple
+            className="sr-only"
+            aria-label="Upload car photos"
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Err msg={errors.photos} />
+
+          {photos.length > 0 && (
+            <div className="mt-3">
+              <div className="flex gap-3">
+                <div
+                  ref={stripRef}
+                  onScroll={onStripScroll}
+                  className="no-scrollbar flex w-full max-w-[408px] gap-3 overflow-x-auto"
+                  role="list"
+                  aria-label="Uploaded photos"
+                >
+                  {photos.map((p, i) => (
+                    <div
+                      key={p.id}
+                      role="listitem"
+                      className="relative h-24 w-32 shrink-0 overflow-hidden bg-off-white"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt={`Upload ${i + 1} — first photo is the cover`} className="h-full w-full object-cover" />
+                      {i === 0 ? (
+                        <span className="absolute left-2 top-2 bg-navy px-2 py-1 font-mono text-[8px] font-bold tracking-[0.06em] text-white">
+                          COVER
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(p.id)}
+                          aria-label={`Remove photo ${i + 1}`}
+                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center bg-white font-sans text-[13px] font-bold leading-none text-navy hover:bg-off-white"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {left > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    aria-label={`Add more photos, ${left} of 10 left`}
+                    className="flex h-24 w-32 shrink-0 flex-col items-center justify-center gap-1 border border-navy bg-navy hover:bg-navy-2"
+                  >
+                    <span className="font-sans text-[24px] font-extrabold leading-none text-white">
+                      +{left}
+                    </span>
+                    <span className="font-mono text-[9px] tracking-[0.06em] text-teal-bright">
+                      {left} OF 10 LEFT
+                    </span>
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => nudge(-1)}
+                  aria-label="Scroll photos left"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center border border-line font-sans text-[14px] text-muted hover:border-navy hover:text-navy"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  onClick={() => nudge(1)}
+                  aria-label="Scroll photos right"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center bg-navy font-sans text-[14px] text-white hover:bg-navy-2"
+                >
+                  →
+                </button>
+                <div className="relative h-1 flex-1 bg-line" aria-hidden>
+                  <span
+                    className="absolute top-0 h-1 w-[120px] max-w-full bg-teal"
+                    style={{ left: `calc(${scrollPct * 100}% - ${scrollPct * 120}px)` }}
+                  />
+                </div>
+                <p className="shrink-0 font-mono text-[10px] text-muted" role="status">
+                  {photos.length} / 10&nbsp;&nbsp;•&nbsp;&nbsp;SCROLL →
+                </p>
+              </div>
+            </div>
+          )}
         </div>
-        <div>
-          <label htmlFor="sell-gear" className="font-mono text-[10px] text-muted">
-            TRANSMISSION *
-          </label>
-          <select
-            id="sell-gear"
-            value={f.transmission}
-            onChange={(e) => set('transmission', e.target.value)}
-            className={`${inputCls} mt-1.5`}
-            aria-invalid={!!errors.transmission}
-          >
-            <option value="">Select…</option>
-            <option>Manual</option>
-            <option>Automatic</option>
-            <option>AMT</option>
-            <option>CVT</option>
-          </select>
-          <Err msg={errors.transmission} />
-        </div>
+
+        <button
+          type="submit"
+          className="w-full bg-navy px-6 py-5 font-sans text-[16px] font-bold text-white hover:bg-navy-2"
+        >
+          Submit for review&nbsp;&nbsp;→
+        </button>
+        <p className="-mt-2 font-sans text-[11px] leading-relaxed text-muted">
+          No listing goes live without physical verification and approval.
+        </p>
       </div>
-      <button
-        type="submit"
-        className="mt-6 w-full bg-navy px-6 py-4 font-sans text-[14px] font-bold text-white hover:bg-navy-2"
-      >
-        Submit for review&nbsp;&nbsp;→
-      </button>
-      <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted">
-        Frontend-only. No listing goes live without physical verification and approval.
-      </p>
     </form>
+  );
+}
+
+function TextField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  error,
+  className,
+  inputMode,
+  mono = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  error?: string;
+  className: string;
+  inputMode?: 'numeric' | 'text';
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="font-mono text-[11px] tracking-[0.06em] text-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        aria-invalid={!!error}
+        className={`${className} mt-1.5 ${mono ? 'font-mono' : ''}`}
+      />
+      <Err msg={error} />
+    </div>
   );
 }
 
@@ -244,15 +503,15 @@ function Err({ msg }: { msg?: string }) {
 
 export function SellPageShell() {
   return (
-    <Container className="grid gap-10 py-12 lg:grid-cols-[0.9fr_1.1fr]">
+    <Container className="grid gap-10 py-16 lg:grid-cols-[0.9fr_1.1fr]">
       <div>
         <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
           SELL&nbsp;&nbsp;•&nbsp;&nbsp;FILE FIRST, LISTING SECOND
         </p>
-        <h1 className="mt-4 font-sans text-[38px] font-extrabold leading-[1.05] text-navy md:text-[48px]">
+        <h1 className="mt-4 font-sans text-[40px] font-extrabold leading-[1.05] tracking-[-0.02em] text-navy md:text-[64px]">
           List once. Prove everything.
         </h1>
-        <p className="mt-4 font-sans text-[15px] leading-relaxed text-muted">
+        <p className="mt-4 font-sans text-[17px] leading-relaxed text-[#5C5C5C]">
           Submit your vehicle. AutoFair reviews, verifies on-site, then publishes the
           dossier with your listing. Buyers arrive quoting your Inspection ID.
         </p>
@@ -262,8 +521,8 @@ export function SellPageShell() {
             'On-site verification + record checks',
             'Approval → dossier goes public',
           ].map((t, i) => (
-            <li key={t} className="flex gap-3 font-sans text-[14px] text-navy">
-              <span className="font-mono text-[12px] text-teal-dark">
+            <li key={t} className="flex gap-3 font-sans text-[18px] text-[#1A1A1A]">
+              <span className="font-mono text-[14px] leading-[1.7] text-teal-dark">
                 {String(i + 1).padStart(2, '0')}
               </span>
               {t}
