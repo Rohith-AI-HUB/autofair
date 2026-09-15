@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ChevronDown, ImagePlus } from 'lucide-react';
 import { Container } from '@/components/shared/Container';
 import { cn } from '@/lib/utils';
+import { createVehicleRow, addVehiclePhotoRows, invalidateMyVehiclesCache } from '@/lib/supabase/queries';
+import { uploadVehiclePhotos } from '@/lib/supabase/storage';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 type Fields = {
   reg: string;
@@ -31,20 +34,24 @@ interface Photo {
   id: string;
   url: string;
   name: string;
+  file: File;
 }
 
 const MAX_PHOTOS = 10;
 const MAX_MB = 5;
-const ACCEPTED = ['image/jpeg', 'image/png'];
+const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
 
 let photoSeq = 0;
 
 export function SellForm() {
   const [f, setF] = useState<Fields>(initial);
-  const [errors, setErrors] = useState<Partial<Record<keyof Fields | 'photos', string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof Fields | 'photos' | 'submit', string>>>({});
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [inspectionId, setInspectionId] = useState<string | null>(null);
+  const [savedToDb, setSavedToDb] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const [scrollPct, setScrollPct] = useState(0);
@@ -70,14 +77,14 @@ export function SellForm() {
     const accepted: Photo[] = [];
     for (const file of incoming) {
       if (!ACCEPTED.includes(file.type)) {
-        problems.push(`${file.name}: only JPG / PNG.`);
+        problems.push(`${file.name}: only JPG / PNG / WebP.`);
         continue;
       }
       if (file.size > MAX_MB * 1024 * 1024) {
         problems.push(`${file.name}: over ${MAX_MB}MB.`);
         continue;
       }
-      accepted.push({ id: `p${++photoSeq}`, url: URL.createObjectURL(file), name: file.name });
+      accepted.push({ id: `p${++photoSeq}`, url: URL.createObjectURL(file), name: file.name, file });
     }
     setPhotos((ps) => {
       const room = MAX_PHOTOS - ps.length;
@@ -132,18 +139,65 @@ export function SellForm() {
     return e;
   }
 
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const v = validate();
+    setErrors(v);
+    if (Object.keys(v).length !== 0) return;
+    if (!isSupabaseConfigured()) {
+      // No DB yet — keep old frontend-only behaviour
+      setSavedToDb(false);
+      setDone(true);
+      return;
+    }
+    setSubmitting(true);
+    setErrors((prev) => ({ ...prev, submit: undefined }));
+    try {
+      const year = Number(f.year.trim());
+      const km = Number(f.km.replace(/,/g, '').trim());
+      const { vehicleId, inspectionId: newId } = await createVehicleRow({
+        reg: f.reg,
+        make: f.make,
+        model: f.model,
+        year,
+        fuel: f.fuel as 'Petrol' | 'Diesel' | 'CNG' | 'Electric' | 'Hybrid',
+        transmission: f.transmission as 'Manual' | 'Automatic' | 'AMT' | 'CVT',
+        km,
+        location: f.location,
+      });
+      // Upload compressed WebP to Supabase Storage (0-rupee pipeline)
+      const uploaded = await uploadVehiclePhotos(
+        vehicleId,
+        photos.map((p) => p.file)
+      );
+      await addVehiclePhotoRows(vehicleId, uploaded);
+      invalidateMyVehiclesCache();
+      setInspectionId(newId);
+      setSavedToDb(true);
+      setDone(true);
+    } catch (err) {
+      setErrors((prev) => ({
+        ...prev,
+        submit: err instanceof Error ? err.message : 'Submit failed. Check Supabase SQL ran + you are signed in.',
+      }));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (done) {
     return (
       <div className="border border-teal-line bg-white p-8" role="status">
-        <p className="font-mono text-[11px] text-teal-dark">FILE CAPTURED — FRONTEND ONLY</p>
+        <p className="font-mono text-[11px] text-teal-dark">{savedToDb ? `FILE SAVED — ${inspectionId ?? ''}` : 'FILE CAPTURED — FRONTEND ONLY'}</p>
         <h2 className="mt-2 font-sans text-[24px] font-extrabold text-navy">
-          Your vehicle details have been captured.
+          {savedToDb ? 'Submitted for review.' : 'Your vehicle details have been captured.'}
         </h2>
         <p className="mt-2 max-w-[520px] font-sans text-[14px] leading-relaxed text-muted">
           AutoFair will review the information ({f.reg.toUpperCase()} · {f.make}{' '}
-          {f.model} · {photos.length} photo{photos.length === 1 ? '' : 's'}). Nothing
-          was sent to a backend — this is a frontend prototype. Next step in
-          production: physical verification and document review.
+          {f.model} · {photos.length} photo{photos.length === 1 ? '' : 's'}).{' '}
+          {savedToDb
+            ? `Saved to Supabase. Quote Inspection ID ${inspectionId} on call. Track it in My Listings after sign-in.`
+            : 'Nothing was sent to a backend — this is a frontend prototype. Run the Supabase migration to enable saving.'}
         </p>
         <button
           type="button"
@@ -151,6 +205,8 @@ export function SellForm() {
             setDone(false);
             setF(initial);
             setPhotos([]);
+            setInspectionId(null);
+            setSavedToDb(false);
           }}
           className="mt-5 border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy"
         >
@@ -167,12 +223,7 @@ export function SellForm() {
   return (
     <form
       noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        const v = validate();
-        setErrors(v);
-        if (Object.keys(v).length === 0) setDone(true);
-      }}
+      onSubmit={handleSubmit}
       className="border border-line bg-white p-6 md:p-10"
     >
       <div className="space-y-5">
@@ -338,14 +389,13 @@ export function SellForm() {
               Browse files
             </span>
             <p className="font-mono text-[10px] tracking-[0.02em] text-muted">
-              JPG / PNG&nbsp;&nbsp;•&nbsp;&nbsp;max 5MB each&nbsp;&nbsp;•&nbsp;&nbsp;exterior,
-              interior, cluster, tyres
+              JPG / PNG / WebP&nbsp;&nbsp;•&nbsp;&nbsp;max 5MB each&nbsp;&nbsp;•&nbsp;&nbsp;auto-compressed to WebP 1280px for 0-rupee storage
             </p>
           </div>
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             className="sr-only"
             aria-label="Upload car photos"
@@ -440,10 +490,21 @@ export function SellForm() {
 
         <button
           type="submit"
-          className="w-full bg-navy px-6 py-5 font-sans text-[16px] font-bold text-white hover:bg-navy-2"
+          disabled={submitting}
+          className="w-full bg-navy px-6 py-5 font-sans text-[16px] font-bold text-white hover:bg-navy-2 disabled:opacity-60"
         >
-          Submit for review&nbsp;&nbsp;→
+          {submitting ? 'Saving + uploading…' : 'Submit for review\u00a0\u00a0→'}
         </button>
+        {errors.submit && (
+          <p role="alert" className="font-sans text-[13px] font-semibold text-[#DC2626]">
+            {errors.submit}{' '}
+            {errors.submit.toLowerCase().includes('sign in') && (
+              <a href="/auth" className="underline hover:no-underline">
+                Go to Sign in →
+              </a>
+            )}
+          </p>
+        )}
         <p className="-mt-2 font-sans text-[11px] leading-relaxed text-muted">
           No listing goes live without physical verification and approval.
         </p>

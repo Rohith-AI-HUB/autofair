@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
 import { getBrowserClient, getRememberChoice } from '@/lib/supabase/client';
+import { getPostLoginDestination } from '@/lib/supabase/queries';
 
 function CallbackHandler() {
   const router = useRouter();
@@ -27,10 +28,16 @@ function CallbackHandler() {
       return;
     }
     let done = false;
-    const finish = () => {
+    const finish = async () => {
       if (done) return;
       done = true;
-      router.replace(next);
+      // Smart post-login: sellers with vehicles → /my-listings, else → /cars.
+      // Respect explicit non-default next (e.g. /sell-your-car) as is.
+      if (next === '/my-listings' || next === '/auth/route') {
+        router.replace(await getPostLoginDestination());
+      } else {
+        router.replace(next);
+      }
       router.refresh();
     };
     sb.auth.getSession().then(({ data }) => {

@@ -20,6 +20,7 @@ import {
   isSupabaseConfigured,
   setRememberChoice,
 } from '@/lib/supabase/client';
+import { getPostLoginDestination } from '@/lib/supabase/queries';
 
 type Mode = 'signin' | 'signup';
 type View = 'form' | 'forgot' | 'check-email' | 'reset-sent';
@@ -110,7 +111,7 @@ export function AuthExperience() {
         setBusy(null);
         return;
       }
-      router.replace('/my-listings');
+      router.replace(await getPostLoginDestination());
       router.refresh();
     } else {
       const { data, error } = await sb.auth.signUp({
@@ -124,7 +125,7 @@ export function AuthExperience() {
         return;
       }
       if (data.session) {
-        router.replace('/my-listings');
+        router.replace(await getPostLoginDestination());
         router.refresh();
       } else {
         setView('check-email');
@@ -278,12 +279,13 @@ export function AuthExperience() {
               </h2>
               <p className="font-sans text-[14px] text-muted">{authedEmail}</p>
               <div className="mt-2 flex flex-wrap gap-3">
-                <Link
-                  href="/my-listings"
+                <button
+                  type="button"
+                  onClick={async () => router.replace(await getPostLoginDestination())}
                   className="bg-navy px-6 py-3 font-sans text-[14px] font-bold text-white hover:bg-navy-2"
                 >
                   Open my garage
-                </Link>
+                </button>
                 <button
                   type="button"
                   onClick={signOut}

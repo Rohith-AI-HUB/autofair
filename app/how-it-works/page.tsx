@@ -66,7 +66,7 @@ export default function HowItWorksPage() {
               {buyerSteps.map((s) => (
                 <div
                   key={s.n}
-                  className="flex items-center justify-between gap-4 border border-line bg-white px-5 py-4"
+                  className="flex items-center gap-4 border border-line bg-white px-5 py-4"
                 >
                   <div className="flex items-baseline gap-4">
                     <span className="font-mono text-[13px] text-muted">{s.n}</span>
@@ -75,9 +75,6 @@ export default function HowItWorksPage() {
                       <p className="mt-1 font-sans text-[13.5px] text-muted">{s.d}</p>
                     </div>
                   </div>
-                  <span aria-hidden className="font-sans text-[18px] text-navy">
-                    →
-                  </span>
                 </div>
               ))}
             </div>

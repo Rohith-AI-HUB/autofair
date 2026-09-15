@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { cars } from '@/lib/data/cars';
+import { cars as seedCars } from '@/lib/data/cars';
+import type { Car } from '@/types';
+import { fetchLiveCars } from '@/lib/supabase/queries';
 import { CarCard } from '@/components/cars/CarCard';
 import { Container } from '@/components/shared/Container';
 
 type SortKey = 'newest' | 'price-asc' | 'price-desc' | 'km-asc' | 'score-desc';
 
-const makes = ['All', 'Hyundai', 'Maruti', 'Honda', 'Tata', 'Kia'];
-const fuels = ['All', 'Petrol', 'Diesel'];
-const transmissions = ['All', 'Manual', 'Automatic', 'AMT'];
-const cities = ['All', ...Array.from(new Set(cars.map((c) => c.location)))];
+const baseMakes = ['All', 'Hyundai', 'Maruti', 'Honda', 'Tata', 'Kia'];
+const fuels = ['All', 'Petrol', 'Diesel', 'CNG', 'Electric', 'Hybrid'];
+const transmissions = ['All', 'Manual', 'Automatic', 'AMT', 'CVT'];
+const baseCities = ['All', ...Array.from(new Set(seedCars.map((c) => c.location)))];
 const priceBands = [
   { label: 'All prices', min: 0, max: Infinity },
   { label: 'Under ₹8L', min: 0, max: 800000 },
@@ -25,20 +27,43 @@ const yearBands = [
 ];
 
 export function CarsExplorer() {
+  // Hydration-safe: first render (server + client) always uses seed. Live cache
+  // + saved city load in effects so back-navigation still feels instant
+  // without SSR text mismatch (6 vs 7 files).
+  const [liveCars, setLiveCars] = useState<Car[] | null>(null);
+  const [source, setSource] = useState<'live' | 'sample'>('sample');
+  const cars = liveCars ?? seedCars;
+  const makes = useMemo(() => {
+    // Dedupe case-insensitively: "Kia" (seed) + "KIA" (user typed) must be one pill.
+    const seen = new Map<string, string>();
+    for (const m of [...baseMakes.slice(1), ...cars.map((c) => c.make)]) {
+      const k = m.trim().toLowerCase();
+      if (!seen.has(k)) seen.set(k, m.trim());
+    }
+    return ['All', ...seen.values()];
+  }, [cars]);
+  const cities = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const m of [...baseCities.slice(1), ...cars.map((c) => c.location)]) {
+      const k = m.trim().toLowerCase();
+      if (k && !seen.has(k)) seen.set(k, m.trim());
+    }
+    return ['All', ...seen.values()];
+  }, [cars]);
   const [query, setQuery] = useState('');
   const [make, setMake] = useState('All');
   const [fuel, setFuel] = useState('All');
   const [gear, setGear] = useState('All');
-  const [city, setCity] = useState(() => {
-    if (typeof window === 'undefined') return 'All';
+  const [city, setCity] = useState('All');
+
+  useEffect(() => {
     try {
       const saved = window.localStorage.getItem('autofair-city');
-      if (saved && cities.includes(saved)) return saved;
+      if (saved) setCity(saved);
     } catch {
       /* storage unavailable */
     }
-    return 'All';
-  });
+  }, []);
 
   useEffect(() => {
     try {
@@ -47,6 +72,20 @@ export function CarsExplorer() {
       /* storage unavailable */
     }
   }, [city]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLiveCars().then((rows) => {
+      if (cancelled) return;
+      if (rows && rows.length) {
+        setLiveCars(rows);
+        setSource('live');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [priceIdx, setPriceIdx] = useState(0);
   const [yearIdx, setYearIdx] = useState(0);
   const [sort, setSort] = useState<SortKey>('newest');
@@ -57,10 +96,10 @@ export function CarsExplorer() {
     const band = priceBands[priceIdx];
     const yb = yearBands[yearIdx];
     let list = cars.filter((c) => {
-      if (make !== 'All' && c.make !== make) return false;
+      if (make !== 'All' && c.make.trim().toLowerCase() !== make.trim().toLowerCase()) return false;
       if (fuel !== 'All' && c.fuel !== fuel) return false;
       if (gear !== 'All' && c.transmission !== gear) return false;
-      if (city !== 'All' && c.location !== city) return false;
+      if (city !== 'All' && c.location.trim().toLowerCase() !== city.trim().toLowerCase()) return false;
       if (c.price < band.min || c.price > band.max) return false;
       if (c.year < yb.min) return false;
       if (q) {
@@ -86,7 +125,7 @@ export function CarsExplorer() {
         list = [...list].sort((a, b) => b.year - a.year);
     }
     return list;
-  }, [query, make, fuel, gear, city, priceIdx, yearIdx, sort]);
+  }, [cars, query, make, fuel, gear, city, priceIdx, yearIdx, sort]);
 
   const filterPanel = (
     <div className="flex flex-col gap-5">
@@ -218,7 +257,7 @@ export function CarsExplorer() {
         )}
         <div>
           <p className="font-mono text-[11px] text-muted" role="status" aria-live="polite">
-            {filtered.length} FILE{filtered.length === 1 ? '' : 'S'} — SAMPLE DATA
+            {filtered.length} FILE{filtered.length === 1 ? '' : 'S'} — {source === 'live' ? 'LIVE FROM SUPABASE' : 'SAMPLE DATA'}
           </p>
           {filtered.length === 0 ? (
             <div className="mt-4 border border-line bg-white p-10 text-center">

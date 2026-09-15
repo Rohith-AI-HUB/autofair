@@ -5,8 +5,47 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Container } from '@/components/shared/Container';
 import { listings as seed, type Listing, type ListingStatus } from '@/lib/data/listings';
-import { getSessionFromAnyStore } from '@/lib/supabase/client';
+import { getSessionFromAnyStore, isSupabaseConfigured } from '@/lib/supabase/client';
+import { fetchMyVehicles, deleteMyVehicle, type MyVehicleRow } from '@/lib/supabase/queries';
 import { cn } from '@/lib/utils';
+
+function formatLakh(n: number): string {
+  return `₹${(n / 100000).toFixed(2)} Lakh`;
+}
+
+function mapRow(r: MyVehicleRow): Listing {
+  const v = r.vehicle;
+  const l = r.listing;
+  const status: ListingStatus =
+    l?.status === 'LIVE' ? 'LIVE' : v.status === 'draft' ? 'DRAFT' : v.status === 'submitted' || v.status === 'in_review' || v.status === 'verified' || l?.status === 'IN_REVIEW' ? 'IN REVIEW' : 'DRAFT';
+  const title = `${v.year} ${v.make} ${v.model}${v.variant ? ` ${v.variant}` : ''}`;
+  const price = formatLakh(l?.price ?? v.price_expected);
+  const viewsNum = l?.views_count ?? 0;
+  return {
+    id: v.id,
+    slug: l?.slug ?? v.id,
+    title,
+    price,
+    priceLabel: status === 'LIVE' ? `VIEW INQUIRIES (${r.inquiriesCount}) →` : status === 'IN REVIEW' ? 'WHAT HAPPENS NEXT?' : 'EXPECTED PRICE',
+    spec: `${v.year}  •  ${v.fuel.toUpperCase()}  •  ${Math.round(v.km_driven / 1000)}K KM  •  ${v.reg_number}`,
+    inspectionId: v.inspection_id,
+    status,
+    meta:
+      status === 'LIVE'
+        ? `✓ LIVE  •  ${viewsNum} views  •  ${r.inquiriesCount} inquiries`
+        : status === 'IN REVIEW'
+          ? `◷ IN REVIEW  •  ${v.inspection_id}`
+          : `○ DRAFT  •  ${v.inspection_id}`,
+    metaTone: status === 'LIVE' ? 'teal' : 'muted',
+    views: `${viewsNum} views`,
+    viewsNum,
+    inquiries: r.inquiriesCount,
+    image: r.coverUrl ?? '/icon.svg',
+    primaryAction: status === 'LIVE' ? 'Open file →' : status === 'IN REVIEW' ? 'Preview →' : 'Resume draft →',
+    secondaryAction: status === 'DRAFT' ? 'Delete' : 'Edit',
+    inquiriesSample: [],
+  };
+}
 
 type Filter = 'ALL' | ListingStatus;
 
@@ -40,7 +79,9 @@ function StatusPill({ status }: { status: ListingStatus }) {
 export function MyListingsExperience() {
   const [auth, setAuth] = useState<'loading' | 'authed' | 'guest'>('loading');
   const [email, setEmail] = useState('');
-  const [rows, setRows] = useState<Listing[]>(seed);
+  const [rows, setRows] = useState<Listing[]>([]);
+  const [loadingRows, setLoadingRows] = useState(true);
+  const [usingSample, setUsingSample] = useState(false);
   const [filter, setFilter] = useState<Filter>('ALL');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [openInquiries, setOpenInquiries] = useState<string | null>(null);
@@ -50,8 +91,29 @@ export function MyListingsExperience() {
       if (session?.user?.email) {
         setAuth('authed');
         setEmail(session.user.email);
+        // Real garage: own vehicles only. Never show seed demo to signed-in users.
+        if (!isSupabaseConfigured()) {
+          setRows(seed);
+          setUsingSample(true);
+          setLoadingRows(false);
+          return;
+        }
+        fetchMyVehicles().then((mine) => {
+          if (mine && mine.length) {
+            setRows(mine.map(mapRow));
+            setUsingSample(false);
+          } else if (mine) {
+            setRows([]);
+            setUsingSample(false);
+          } else {
+            setRows(seed);
+            setUsingSample(true);
+          }
+          setLoadingRows(false);
+        });
       } else {
         setAuth('guest');
+        setLoadingRows(false);
       }
     });
   }, []);
@@ -67,8 +129,15 @@ export function MyListingsExperience() {
   const visible = rows.filter((r) => filter === 'ALL' || r.status === filter);
 
   function remove(id: string) {
+    const target = rows.find((r) => r.id === id);
     setRows((rs) => rs.filter((r) => r.id !== id));
     setConfirmDelete(null);
+    // Delete real vehicle from DB (cascades photos/listings). Seed rows just disappear locally.
+    if (target && !usingSample) {
+      deleteMyVehicle(id).catch(() => {
+        /* keep local removal even if DB delete fails */
+      });
+    }
   }
 
   if (auth === 'loading') {
@@ -187,11 +256,29 @@ export function MyListingsExperience() {
           })}
         </div>
         <p className="font-mono text-[10px] tracking-[0.04em] text-muted">
-          SORT: NEWEST ↓
+          SORT: NEWEST ↓{usingSample ? '  •  SAMPLE DATA' : '  •  LIVE'}
         </p>
       </div>
 
-      {visible.length === 0 ? (
+      {loadingRows ? (
+        <div className="mt-4 border border-line bg-white p-10 text-center">
+          <p className="font-mono text-[11px] text-muted" role="status">OPENING GARAGE…</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="mt-4 border border-line bg-white p-10 text-center">
+          <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">GARAGE EMPTY</p>
+          <p className="mt-2 font-sans text-[18px] font-bold text-navy">You have not listed any car yet.</p>
+          <p className="mt-2 font-sans text-[14px] text-muted">List your first car, or browse verified cars.</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <Link href="/sell-your-car" className="bg-navy px-6 py-3 font-sans text-[13px] font-bold text-white">
+              List your car →
+            </Link>
+            <Link href="/cars" className="border border-navy/30 px-6 py-3 font-sans text-[13px] font-bold text-navy">
+              Browse cars
+            </Link>
+          </div>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="mt-4 border border-line bg-white p-10 text-center">
           <p className="font-sans text-[18px] font-bold text-navy">No files with this status.</p>
           <button

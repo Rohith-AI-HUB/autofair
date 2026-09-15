@@ -7,6 +7,7 @@ import { VehicleSummary } from '@/components/cars/VehicleSummary';
 import { TrustReport } from '@/components/cars/TrustReport';
 import { CarCard } from '@/components/cars/CarCard';
 import { cars, getCarBySlug, carTitle } from '@/lib/data/cars';
+import { fetchCarBySlugFromDb, fetchLiveCars } from '@/lib/supabase/queries';
 
 export async function generateStaticParams() {
   return cars.map((c) => ({ slug: c.slug }));
@@ -18,7 +19,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const car = getCarBySlug(slug);
+  const car = (await fetchCarBySlugFromDb(slug)) ?? getCarBySlug(slug);
   if (!car) return { title: 'Not found | AutoFair' };
   return {
     title: `${carTitle(car)} | AutoFair`,
@@ -32,10 +33,12 @@ export default async function CarDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const car = getCarBySlug(slug);
+  const car = (await fetchCarBySlugFromDb(slug)) ?? getCarBySlug(slug);
   if (!car) notFound();
 
-  const related = cars.filter((c) => c.slug !== car.slug).slice(0, 3);
+  const liveRelated = await fetchLiveCars();
+  const pool = liveRelated?.length ? liveRelated : cars;
+  const related = pool.filter((c) => c.slug !== car.slug).slice(0, 3);
 
   return (
     <Container className="pb-16 pt-8">
