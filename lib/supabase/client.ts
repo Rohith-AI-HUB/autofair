@@ -60,13 +60,25 @@ export async function getSessionFromAnyStore(): Promise<{
   session: import('@supabase/supabase-js').Session | null;
   persist: PersistChoice;
 }> {
-  for (const persist of ['local', 'session'] as const) {
-    const sb = getBrowserClient(persist);
-    if (!sb) return { session: null, persist: 'local' };
-    const { data } = await sb.auth.getSession();
-    if (data.session) return { session: data.session, persist };
+  // Never throws raw auth/DB errors to callers. Failures are logged and
+  // treated as "no session" so UI falls back safely (guest garage, etc.).
+  try {
+    for (const persist of ['local', 'session'] as const) {
+      const sb = getBrowserClient(persist);
+      if (!sb) return { session: null, persist: 'local' };
+      const { data } = await sb.auth.getSession();
+      if (data.session) return { session: data.session, persist };
+    }
+    return { session: null, persist: 'local' };
+  } catch (err) {
+    try {
+      const { logDbError } = await import('@/lib/errors/db-error');
+      logDbError('auth.getSession', err);
+    } catch {
+      /* logging must never throw */
+    }
+    return { session: null, persist: 'local' };
   }
-  return { session: null, persist: 'local' };
 }
 
 export function getSiteUrl(): string {

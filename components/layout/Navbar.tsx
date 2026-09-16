@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Logo } from '@/components/shared/Logo';
 import { AuthButton } from '@/components/auth/AuthButton';
+import { useAuth } from '@/lib/auth/useAuth';
 
 const links = [
   { label: 'Buy Cars', href: '/cars' },
@@ -16,6 +17,13 @@ const links = [
 
 export function Navbar() {
   const [open, setOpen] = useState(false);
+  const { role, isAuthed } = useAuth();
+  // Strict role separation: admins see only Admin Dashboard, staff see only
+  // My Inspections. Customer links are hidden for those roles so the wrong
+  // interface is never advertised (routes themselves also redirect).
+  const isAdmin = role === 'ADMIN';
+  const isStaff = role === 'STAFF';
+  const isCustomerUI = !isAdmin && !isStaff;
 
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-off-white">
@@ -28,31 +36,61 @@ export function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-[30px] lg:flex">
-          {links.map((l) => (
+          {isAdmin ? (
             <Link
-              key={l.href}
-              href={l.href}
-              className="font-sans text-[14px] font-medium text-navy hover:underline"
+              href="/admin"
+              className="font-sans text-[14px] font-bold text-teal-dark hover:underline"
             >
-              {l.label}
+              Admin Dashboard
             </Link>
-          ))}
+          ) : isStaff ? (
+            <Link
+              href="/staff"
+              className="font-sans text-[14px] font-bold text-teal-dark hover:underline"
+            >
+              My Inspections
+            </Link>
+          ) : (
+            <>
+              {links.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="font-sans text-[14px] font-medium text-navy hover:underline"
+                >
+                  {l.label}
+                </Link>
+              ))}
+              {isAuthed && (
+                <Link
+                  href="/my-listings"
+                  className="font-sans text-[14px] font-medium text-navy hover:underline"
+                >
+                  My Listings
+                </Link>
+              )}
+            </>
+          )}
         </div>
 
         <div className="hidden items-center gap-3 lg:flex">
           <AuthButton />
-          <Link
-            href="/cars"
-            className="bg-teal px-5 py-3 font-sans text-[14px] font-bold text-navy hover:bg-[#12a295]"
-          >
-            Browse Verified Cars
-          </Link>
-          <Link
-            href="/sell-your-car"
-            className="rounded-full border border-navy/40 px-5 py-[10px] font-sans text-[14px] font-semibold text-navy hover:border-navy"
-          >
-            Sell Your Car
-          </Link>
+          {isCustomerUI && (
+            <>
+              <Link
+                href="/cars"
+                className="bg-teal px-5 py-3 font-sans text-[14px] font-bold text-navy hover:bg-[#12a295]"
+              >
+                Browse Verified Cars
+              </Link>
+              <Link
+                href="/sell-your-car"
+                className="rounded-full border border-navy/40 px-5 py-[10px] font-sans text-[14px] font-semibold text-navy hover:border-navy"
+              >
+                Sell Your Car
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -69,32 +107,65 @@ export function Navbar() {
       {open && (
         <div className="border-t border-line bg-off-white px-5 pb-6 pt-4 lg:hidden">
           <div className="flex flex-col gap-1">
-            {links.map((l) => (
+            {isAdmin ? (
               <Link
-                key={l.href}
-                href={l.href}
+                href="/admin"
                 onClick={() => setOpen(false)}
-                className="border-b border-line py-3 font-sans text-[15px] font-semibold text-navy"
+                className="border-b border-line py-3 font-sans text-[15px] font-bold text-teal-dark"
               >
-                {l.label}
+                Admin Dashboard
               </Link>
-            ))}
+            ) : isStaff ? (
+              <Link
+                href="/staff"
+                onClick={() => setOpen(false)}
+                className="border-b border-line py-3 font-sans text-[15px] font-bold text-teal-dark"
+              >
+                My Inspections
+              </Link>
+            ) : (
+              <>
+                {links.map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    onClick={() => setOpen(false)}
+                    className="border-b border-line py-3 font-sans text-[15px] font-semibold text-navy"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+                {isAuthed && (
+                  <Link
+                    href="/my-listings"
+                    onClick={() => setOpen(false)}
+                    className="border-b border-line py-3 font-sans text-[15px] font-semibold text-navy"
+                  >
+                    My Listings
+                  </Link>
+                )}
+              </>
+            )}
             <div className="mt-4 flex flex-col gap-2">
               <AuthButton onNavigate={() => setOpen(false)} />
-              <Link
-                href="/cars"
-                onClick={() => setOpen(false)}
-                className="bg-teal px-5 py-3 text-center font-sans text-[14px] font-bold text-navy"
-              >
-                Browse Verified Cars
-              </Link>
-              <Link
-                href="/sell-your-car"
-                onClick={() => setOpen(false)}
-                className="rounded-full border border-navy/40 px-5 py-3 text-center font-sans text-[14px] font-semibold text-navy"
-              >
-                Sell Your Car
-              </Link>
+              {isCustomerUI && (
+                <>
+                  <Link
+                    href="/cars"
+                    onClick={() => setOpen(false)}
+                    className="bg-teal px-5 py-3 text-center font-sans text-[14px] font-bold text-navy"
+                  >
+                    Browse Verified Cars
+                  </Link>
+                  <Link
+                    href="/sell-your-car"
+                    onClick={() => setOpen(false)}
+                    className="rounded-full border border-navy/40 px-5 py-3 text-center font-sans text-[14px] font-semibold text-navy"
+                  >
+                    Sell Your Car
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

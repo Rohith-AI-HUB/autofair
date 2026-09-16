@@ -1,7 +1,14 @@
 import type { Car } from '@/types';
-import type { DbListing, DbVehicle, DbVehiclePhoto, ListingWithVehicle } from '@/lib/supabase/db-types';
+import type { DbListing, DbVehicle, DbVehiclePhoto } from '@/lib/supabase/db-types';
 import { getServerClient } from '@/lib/supabase/server';
 import { getBrowserClient } from '@/lib/supabase/client';
+import { fetchCurrentProfile } from '@/lib/auth/roles';
+import {
+  DbOperationError,
+  SAFE_MESSAGES,
+  classifyDbError,
+  logDbError,
+} from '@/lib/errors/db-error';
 
 // Map DB rows → existing app Car type so UI keeps working with mock fallback.
 export function dbToCar(
@@ -75,6 +82,7 @@ let liveMem: { at: number; cars: Car[] } | null = null;
 
 async function refreshLiveCars(): Promise<Car[] | null> {
   // Returns null when DB not configured or tables missing → caller falls back to mock.
+  // Failures are logged server-side (logDbError) but never thrown to the UI.
   try {
     const sb = getServerClient();
     if (!sb) return null;
@@ -85,7 +93,11 @@ async function refreshLiveCars(): Promise<Car[] | null> {
       .eq('status', 'LIVE')
       .order('published_at', { ascending: false })
       .limit(24);
-    if (error || !listings) return null;
+    if (error) {
+      logDbError('listings.fetchLive', error);
+      return null;
+    }
+    if (!listings) return null;
 
     const out: Car[] = [];
     for (const row of listings as unknown as (DbListing & {
@@ -109,7 +121,8 @@ async function refreshLiveCars(): Promise<Car[] | null> {
       }
     }
     return out.length ? out : null;
-  } catch {
+  } catch (err) {
+    logDbError('listings.fetchLive', err);
     return null;
   }
 }
@@ -169,7 +182,11 @@ async function refreshMyVehicles(): Promise<MyVehicleRow[] | null> {
       .select('*')
       .eq('seller_id', uid)
       .order('created_at', { ascending: false });
-    if (error || !vehicles) return null;
+    if (error) {
+      logDbError('vehicles.fetchMine', error);
+      return null;
+    }
+    if (!vehicles) return null;
     const out: MyVehicleRow[] = [];
     for (const v of vehicles as DbVehicle[]) {
       const [{ data: photos }, { data: listing }] = await Promise.all([
@@ -194,7 +211,8 @@ async function refreshMyVehicles(): Promise<MyVehicleRow[] | null> {
       }
     }
     return out;
-  } catch {
+  } catch (err) {
+    logDbError('vehicles.fetchMine', err);
     return null;
   }
 }
@@ -212,30 +230,58 @@ export function invalidateMyVehiclesCache(): void {
 
 export async function deleteMyVehicle(vehicleId: string): Promise<void> {
   const sb = getBrowserClient('local') ?? getBrowserClient('session');
-  if (!sb) throw new Error('Supabase not configured.');
+  if (!sb) {
+    throw new DbOperationError('vehicles.delete', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId },
+    });
+  }
   const { error } = await sb.from('vehicles').delete().eq('id', vehicleId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const classified = classifyDbError(error);
+    throw new DbOperationError('vehicles.delete', error, {
+      // Keep specific mappings (409/422/403/401/503); only generic 500s
+      // get the contextual delete message. Both are safe for users.
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.DELETE_FAILED }
+        : {}),
+      context: { vehicleId },
+    });
+  }
   invalidateMyVehiclesCache();
   invalidateLiveCarsCache();
 }
 
-// Post-login routing: sellers with any vehicle → /my-listings, else → /cars.
-// Used by AuthExperience (email) + auth callback (Google). Falls back to
-// /my-listings on error so login never blocks.
-export async function getPostLoginDestination(): Promise<'/my-listings' | '/cars'> {
+// Post-login routing (trusted role first, never frontend-supplied).
+// ADMIN -> /admin, STAFF -> /staff, CUSTOMER -> sellers with vehicles go to
+// /my-listings else /cars. Used by AuthForm (email) + auth callback (Google).
+// Falls back to /my-listings on error so login never blocks (customer-safe;
+// never grants staff/admin on failure).
+export async function getPostLoginDestination(): Promise<'/admin' | '/staff' | '/my-listings' | '/cars'> {
   try {
     const sb = getBrowserClient('local') ?? getBrowserClient('session');
     if (!sb || typeof window === 'undefined') return '/my-listings';
     const { data: sessionData } = await sb.auth.getSession();
     const uid = sessionData.session?.user?.id;
     if (!uid) return '/my-listings';
+    // fetchCurrentProfile reads profiles.role from the backend (source of
+    // truth). Unknown/missing safely maps to CUSTOMER, never staff/admin.
+    const profile = await fetchCurrentProfile().catch(() => null);
+    if (profile?.role === 'ADMIN') return '/admin';
+    if (profile?.role === 'STAFF') return '/staff';
     const { count, error } = await sb
       .from('vehicles')
       .select('id', { count: 'exact', head: true })
       .eq('seller_id', uid);
-    if (error) return '/my-listings';
+    if (error) {
+      logDbError('vehicles.countMine', error);
+      return '/my-listings';
+    }
     return (count ?? 0) > 0 ? '/my-listings' : '/cars';
-  } catch {
+  } catch (err) {
+    logDbError('vehicles.countMine', err);
     return '/my-listings';
   }
 }
@@ -245,15 +291,24 @@ export async function fetchCarBySlugFromDb(slug: string): Promise<Car | null> {
     const sb = getServerClient();
     if (!sb) return null;
     const { data: listing, error } = await sb.from('listings').select('*').eq('slug', slug).maybeSingle();
-    if (error || !listing) return null;
+    if (error) {
+      logDbError('listings.fetchBySlug', error, { slug });
+      return null;
+    }
+    if (!listing) return null;
     const l = listing as DbListing;
-    const { data: vehicle } = await sb.from('vehicles').select('*').eq('id', l.vehicle_id).maybeSingle();
+    const { data: vehicle, error: vErr } = await sb.from('vehicles').select('*').eq('id', l.vehicle_id).maybeSingle();
+    if (vErr) {
+      logDbError('vehicles.fetchById', vErr);
+      return null;
+    }
     if (!vehicle) return null;
     const v = vehicle as DbVehicle;
     const { data: photos } = await sb.from('vehicle_photos').select('*').eq('vehicle_id', v.id).order('sort_order');
     const { data: insp } = await sb.from('inspections').select('score').eq('vehicle_id', v.id).maybeSingle();
     return dbToCar(v, (photos as DbVehiclePhoto[]) ?? [], l, (insp as { score: number | null } | null)?.score ?? null);
-  } catch {
+  } catch (err) {
+    logDbError('listings.fetchBySlug', err);
     return null;
   }
 }
@@ -276,19 +331,39 @@ export async function createVehicleRow(
   input: SellInput
 ): Promise<{ vehicleId: string; inspectionId: string }> {
   const sb = getBrowserClient('local') ?? getBrowserClient('session');
-  if (!sb) throw new Error('Supabase not configured.');
+  if (!sb) {
+    throw new DbOperationError('vehicles.create', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+    });
+  }
   const { data: sessionData } = await sb.auth.getSession();
   const sellerId = sessionData.session?.user?.id ?? null;
-  if (!sellerId) throw new Error('Please sign in to list your car. Go to Sign in, then submit again — your form is kept.');
+  if (!sellerId) {
+    throw new DbOperationError('vehicles.create', new Error('Missing session'), {
+      status: 401,
+      code: 'UNAUTHORIZED',
+      userMessage: 'Please sign in to list your car. Go to Sign in, then submit again — your form is kept.',
+    });
+  }
 
   // Self-heal: you signed up before the migration ran, so no profiles row exists yet.
-  // FK vehicles_seller_id_fkey requires it. Upsert is safe under RLS (own id).
+  // Upsert is safe under RLS (own id).
   const userEmail = sessionData.session?.user?.email ?? null;
   const { error: profErr } = await sb.from('profiles').upsert(
     { id: sellerId, full_name: userEmail ? userEmail.split('@')[0] : null },
     { onConflict: 'id' }
   );
-  if (profErr) throw new Error(`Could not create seller profile: ${profErr.message}. Run 0004_backfill_profiles.sql in SQL Editor and retry.`);
+  if (profErr) {
+    const classified = classifyDbError(profErr);
+    throw new DbOperationError('profiles.upsert', profErr, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PROFILE_SETUP_FAILED }
+        : {}),
+      context: { year: input.year, fuel: input.fuel },
+    });
+  }
 
   const normMake = input.make.trim().replace(/\s+/g, ' ');
   const normMakeTitle = normMake.charAt(0).toUpperCase() + normMake.slice(1).toLowerCase();
@@ -313,7 +388,16 @@ export async function createVehicleRow(
     })
     .select('id, inspection_id')
     .single();
-  if (vErr || !vehicle) throw new Error(vErr?.message ?? 'Could not create vehicle. If you just ran the migration, wait 30s for PostgREST to reload.');
+  if (vErr || !vehicle) {
+    const raw = vErr ?? new Error('Vehicle insert returned no row');
+    const classified = classifyDbError(raw);
+    throw new DbOperationError('vehicles.create', raw, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.VEHICLE_SAVE_FAILED }
+        : {}),
+      context: { year: input.year, fuel: input.fuel, transmission: input.transmission },
+    });
+  }
   return {
     vehicleId: (vehicle as { id: string }).id,
     inspectionId: (vehicle as { inspection_id: string }).inspection_id,
@@ -326,7 +410,14 @@ export async function addVehiclePhotoRows(
 ): Promise<void> {
   if (!uploaded.length) return;
   const sb = getBrowserClient('local') ?? getBrowserClient('session');
-  if (!sb) throw new Error('Supabase not configured.');
+  if (!sb) {
+    throw new DbOperationError('vehicle_photos.insert', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId, photoCount: uploaded.length },
+    });
+  }
   const rows = uploaded.map((u, i) => ({
     vehicle_id: vehicleId,
     storage_path: u.storagePath,
@@ -335,7 +426,15 @@ export async function addVehiclePhotoRows(
     is_cover: i === 0,
   }));
   const { error: pErr } = await sb.from('vehicle_photos').insert(rows);
-  if (pErr) throw new Error(`Vehicle saved but photos failed: ${pErr.message}`);
+  if (pErr) {
+    const classified = classifyDbError(pErr);
+    throw new DbOperationError('vehicle_photos.insert', pErr, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PHOTOS_SAVE_FAILED }
+        : {}),
+      context: { vehicleId, photoCount: uploaded.length },
+    });
+  }
 }
 
 // Backwards-compat: old helper that accepted pre-uploaded URLs

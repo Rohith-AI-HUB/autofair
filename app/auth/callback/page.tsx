@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
 import { getBrowserClient, getRememberChoice } from '@/lib/supabase/client';
 import { getPostLoginDestination } from '@/lib/supabase/queries';
+import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
 
 function CallbackHandler() {
   const router = useRouter();
@@ -31,12 +32,22 @@ function CallbackHandler() {
     const finish = async () => {
       if (done) return;
       done = true;
-      // Smart post-login: sellers with vehicles → /my-listings, else → /cars.
-      // Respect explicit non-default next (e.g. /sell-your-car) as is.
+      // Trusted role home first (admin->/admin, staff->/staff). An explicit
+      // non-default next is honored only if the role is allowed there.
+      const home = await getPostLoginDestination();
       if (next === '/my-listings' || next === '/auth/route') {
-        router.replace(await getPostLoginDestination());
+        router.replace(home);
+      } else if (next && next.startsWith('/')) {
+        try {
+          const { fetchCurrentProfile, isPathAllowedForRole } = await import('@/lib/auth/roles');
+          const profile = await fetchCurrentProfile().catch(() => null);
+          const role = profile?.role ?? null;
+          router.replace(role && !isPathAllowedForRole(next, role) ? home : next);
+        } catch {
+          router.replace(next);
+        }
       } else {
-        router.replace(next);
+        router.replace(home);
       }
       router.refresh();
     };
@@ -51,11 +62,13 @@ function CallbackHandler() {
       sb.auth
         .exchangeCodeForSession(code)
         .then(({ error }) => {
-          if (error) setError(error.message);
-          else finish();
+          if (error) {
+            if (isLeakyMessage(error.message)) logDbError('auth.exchangeCode', error);
+            setError(getSafeAuthMessage(error));
+          } else finish();
         })
         .catch((e: unknown) => {
-          setError(e instanceof Error ? e.message : 'Sign-in failed. Try again.');
+          setError(getSafeAuthMessage(e, 'Sign-in failed. Try again.'));
         });
     }, 1500);
     return () => {

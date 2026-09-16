@@ -6,3 +6,5 @@ out
 .env
 *.tsbuildinfo
 tmp-*
+/tests
+ADMIN_SETUP.md

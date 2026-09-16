@@ -4,6 +4,7 @@
 // Keeps Supabase Free 1GB / 5GB egress alive: ~150-200KB per photo, 10 photos ≈ 2MB per car.
 
 import { getBrowserClient } from '@/lib/supabase/client';
+import { DbOperationError, SAFE_MESSAGES, classifyDbError } from '@/lib/errors/db-error';
 
 export const PHOTO_BUCKET = 'vehicle-photos';
 const MAX_DIM = 1280;
@@ -44,7 +45,14 @@ export async function uploadVehiclePhotos(
   files: File[]
 ): Promise<{ storagePath: string; publicUrl: string }[]> {
   const sb = getBrowserClient('local') ?? getBrowserClient('session');
-  if (!sb) throw new Error('Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL/ANON_KEY.');
+  if (!sb) {
+    throw new DbOperationError('storage.upload', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId, fileCount: files.length },
+    });
+  }
 
   const out: { storagePath: string; publicUrl: string }[] = [];
   for (let i = 0; i < files.length; i++) {
@@ -54,7 +62,17 @@ export async function uploadVehiclePhotos(
       contentType: 'image/webp',
       upsert: false,
     });
-    if (error) throw new Error(`Upload failed (${files[i].name}): ${error.message}`);
+    if (error) {
+      const classified = classifyDbError(error);
+      throw new DbOperationError('storage.upload', error, {
+        ...(classified.code === 'INTERNAL'
+          ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.UPLOAD_FAILED }
+          : {}),
+        // Never include the original file name in the user message — it can
+        // leak local paths. Keep counts only; original error stays in logs.
+        context: { vehicleId, fileCount: files.length, failedIndex: i },
+      });
+    }
     const { data } = sb.storage.from(PHOTO_BUCKET).getPublicUrl(path);
     out.push({ storagePath: path, publicUrl: data.publicUrl });
   }

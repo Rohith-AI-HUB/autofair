@@ -4,6 +4,7 @@ import './globals.css';
 import { LedgerBar } from '@/components/layout/LedgerBar';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { AuthModalHost } from '@/components/auth/AuthModalHost';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Navbar />
         <main>{children}</main>
         <Footer />
+        <AuthModalHost />
       </body>
     </html>
   );

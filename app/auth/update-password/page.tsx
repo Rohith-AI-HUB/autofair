@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
 import { getBrowserClient } from '@/lib/supabase/client';
+import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -28,7 +29,8 @@ export default function UpdatePasswordPage() {
     const { error } = await sb.auth.updateUser({ password });
     setBusy(false);
     if (error) {
-      setError(error.message);
+      if (isLeakyMessage(error.message)) logDbError('auth.updatePassword', error);
+      setError(getSafeAuthMessage(error));
       return;
     }
     setDone(true);

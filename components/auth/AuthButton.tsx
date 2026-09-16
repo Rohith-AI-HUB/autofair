@@ -4,11 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User } from 'lucide-react';
-import {
-  getBrowserClient,
-  getSessionFromAnyStore,
-} from '@/lib/supabase/client';
-import { getPostLoginDestination } from '@/lib/supabase/queries';
+import { getBrowserClient, getSessionFromAnyStore } from '@/lib/supabase/client';
+import { openAuthModal } from '@/lib/auth/modal';
 
 export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
@@ -58,9 +55,18 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
 
   async function signOut() {
     setSigningOut(true);
+    setEmail(null);
     try {
-      const { persist } = await getSessionFromAnyStore();
-      await getBrowserClient(persist)?.auth.signOut();
+      try {
+        await getBrowserClient('local')?.auth.signOut();
+      } catch {
+        /* sign-out must never throw */
+      }
+      try {
+        await getBrowserClient('session')?.auth.signOut();
+      } catch {
+        /* sign-out must never throw */
+      }
       try {
         window.localStorage.removeItem('autofair-live-cars');
         window.sessionStorage.removeItem('autofair-live-cars');
@@ -76,12 +82,6 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
       router.replace('/');
       router.refresh();
     }
-  }
-
-  async function openGarage() {
-    setOpen(false);
-    onNavigate?.();
-    router.replace(await getPostLoginDestination());
   }
 
   if (!ready) return null;
@@ -112,14 +112,6 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
                 {email}
               </span>
             </p>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={openGarage}
-              className="block w-full px-4 py-3 text-left font-sans text-[13.5px] font-bold text-navy hover:bg-off-white"
-            >
-              My garage →
-            </button>
             <Link
               href="/sell-your-car"
               role="menuitem"
@@ -158,13 +150,16 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <Link
-      href="/auth"
-      onClick={onNavigate}
+    <button
+      type="button"
+      onClick={() => {
+        onNavigate?.();
+        openAuthModal({ mode: 'signin' });
+      }}
       className="inline-flex items-center gap-2 px-3 py-[10px] font-sans text-[14px] font-semibold text-navy hover:underline"
     >
       <User size={16} aria-hidden />
       Sign in
-    </Link>
+    </button>
   );
 }

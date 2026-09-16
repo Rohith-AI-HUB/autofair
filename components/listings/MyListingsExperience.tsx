@@ -7,6 +7,8 @@ import { Container } from '@/components/shared/Container';
 import { listings as seed, type Listing, type ListingStatus } from '@/lib/data/listings';
 import { getSessionFromAnyStore, isSupabaseConfigured } from '@/lib/supabase/client';
 import { fetchMyVehicles, deleteMyVehicle, type MyVehicleRow } from '@/lib/supabase/queries';
+import { getSafeErrorMessage } from '@/lib/errors/db-error';
+import { openAuthModal } from '@/lib/auth/modal';
 import { cn } from '@/lib/utils';
 
 function formatLakh(n: number): string {
@@ -32,10 +34,10 @@ function mapRow(r: MyVehicleRow): Listing {
     status,
     meta:
       status === 'LIVE'
-        ? `✓ LIVE  •  ${viewsNum} views  •  ${r.inquiriesCount} inquiries`
+        ? `✓ Verified  •  ${viewsNum} views  •  ${r.inquiriesCount} inquiries`
         : status === 'IN REVIEW'
-          ? `◷ IN REVIEW  •  ${v.inspection_id}`
-          : `○ DRAFT  •  ${v.inspection_id}`,
+          ? `◷ Pending Verification  •  ${v.inspection_id}`
+          : `○ Draft  •  ${v.inspection_id}`,
     metaTone: status === 'LIVE' ? 'teal' : 'muted',
     views: `${viewsNum} views`,
     viewsNum,
@@ -85,6 +87,7 @@ export function MyListingsExperience() {
   const [filter, setFilter] = useState<Filter>('ALL');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [openInquiries, setOpenInquiries] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     getSessionFromAnyStore().then(({ session }) => {
@@ -130,14 +133,20 @@ export function MyListingsExperience() {
 
   function remove(id: string) {
     const target = rows.find((r) => r.id === id);
+    setDeleteError(null);
+    // Optimistic removal; restore + show a safe message if the DB delete fails.
+    // DbOperationError already logs the raw error server-side via logDbError.
+    if (target && !usingSample) {
+      setRows((rs) => rs.filter((r) => r.id !== id));
+      setConfirmDelete(null);
+      deleteMyVehicle(id).catch((err: unknown) => {
+        setRows((rs) => (rs.some((r) => r.id === id) ? rs : [...rs, target]));
+        setDeleteError(getSafeErrorMessage(err, 'Could not delete this vehicle. Please try again later.'));
+      });
+      return;
+    }
     setRows((rs) => rs.filter((r) => r.id !== id));
     setConfirmDelete(null);
-    // Delete real vehicle from DB (cascades photos/listings). Seed rows just disappear locally.
-    if (target && !usingSample) {
-      deleteMyVehicle(id).catch(() => {
-        /* keep local removal even if DB delete fails */
-      });
-    }
   }
 
   if (auth === 'loading') {
@@ -163,12 +172,13 @@ export function MyListingsExperience() {
           <p className="mt-2 font-sans text-[14px] text-muted">
             Your listed cars live behind your account.
           </p>
-          <Link
-            href="/auth"
+          <button
+            type="button"
+            onClick={() => openAuthModal({ mode: 'signin' })}
             className="mt-5 inline-block bg-navy px-6 py-3 font-sans text-[14px] font-bold text-white hover:bg-navy-2"
           >
             Sign in&nbsp;&nbsp;→
-          </Link>
+          </button>
         </div>
       </Container>
     );
@@ -259,6 +269,12 @@ export function MyListingsExperience() {
           SORT: NEWEST ↓{usingSample ? '  •  SAMPLE DATA' : '  •  LIVE'}
         </p>
       </div>
+
+      {deleteError && (
+        <p role="alert" className="mt-4 border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">
+          {deleteError}
+        </p>
+      )}
 
       {loadingRows ? (
         <div className="mt-4 border border-line bg-white p-10 text-center">

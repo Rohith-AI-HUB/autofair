@@ -25,8 +25,8 @@ export default function ContactPage() {
           <dl className="mt-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
             {[
               ['Email', 'hello@autofair.in'],
-              ['Phone · 10–7 IST', '+91 80 4719 2000'],
-              ['Yard by appointment', 'Koramangala, Bengaluru'],
+              ['Phone · 10–7 IST', '+91 9686413636'],
+              ['Yard by appointment', 'CV Raman Nagar, Bangalore'],
             ].map(([k, v]) => (
               <div key={k} className="border border-line bg-white p-4">
                 <dt className="font-mono text-[10.5px] text-muted">{k.toUpperCase()}</dt>

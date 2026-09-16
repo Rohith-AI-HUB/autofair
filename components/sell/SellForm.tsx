@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { createVehicleRow, addVehiclePhotoRows, invalidateMyVehiclesCache } from '@/lib/supabase/queries';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { getSafeErrorMessage } from '@/lib/errors/db-error';
+import { openAuthModal } from '@/lib/auth/modal';
 
 type Fields = {
   reg: string;
@@ -176,9 +178,11 @@ export function SellForm() {
       setSavedToDb(true);
       setDone(true);
     } catch (err) {
+      // Never render raw DB/driver text. DbOperationError already carries a
+      // safe userMessage; anything else falls back to a generic message.
       setErrors((prev) => ({
         ...prev,
-        submit: err instanceof Error ? err.message : 'Submit failed. Check Supabase SQL ran + you are signed in.',
+        submit: getSafeErrorMessage(err, 'Submit failed. Please try again later.'),
       }));
     } finally {
       setSubmitting(false);
@@ -499,9 +503,13 @@ export function SellForm() {
           <p role="alert" className="font-sans text-[13px] font-semibold text-[#DC2626]">
             {errors.submit}{' '}
             {errors.submit.toLowerCase().includes('sign in') && (
-              <a href="/auth" className="underline hover:no-underline">
+              <button
+                type="button"
+                onClick={() => openAuthModal({ mode: 'signin' })}
+                className="underline hover:no-underline"
+              >
                 Go to Sign in →
-              </a>
+              </button>
             )}
           </p>
         )}
