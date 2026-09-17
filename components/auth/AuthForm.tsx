@@ -13,7 +13,7 @@ import {
 } from '@/lib/supabase/client';
 import { getPostLoginDestination } from '@/lib/supabase/queries';
 import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
-import { isStrongStaffPassword, STAFF_PASSWORD_MESSAGE } from '@/lib/auth/password-policy';
+
 
 export type AuthFormMode = 'signin' | 'signup';
 export type AuthFormView = 'form' | 'forgot' | 'check-email' | 'reset-sent';
@@ -118,7 +118,7 @@ export function AuthForm({
     if (!email.trim()) return 'Enter your email address.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Enter a valid email address.';
     if (view === 'form' && !password) return 'Enter your password.';
-    if (view === 'form' && mode === 'signup' && !isStrongStaffPassword(password)) return STAFF_PASSWORD_MESSAGE;
+    if (view === 'form' && mode === 'signup' && password.length < 6) return 'Password must be at least 6 characters.';
     return null;
   }
 
