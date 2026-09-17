@@ -51,6 +51,16 @@ function HostInner() {
     }
   }, [params]);
 
+  // Handle OAuth PKCE callbacks that land on the root or other pages (e.g. Supabase fallback to Site URL: https://www.autofair.online/?code=...)
+  useEffect(() => {
+    const code = params.get('code');
+    if (code && pathname !== '/auth/callback') {
+      const search = typeof window !== 'undefined' ? window.location.search : `?code=${encodeURIComponent(code)}`;
+      const hash = typeof window !== 'undefined' ? window.location.hash : '';
+      router.replace(`/auth/callback${search}${hash}`);
+    }
+  }, [params, pathname, router]);
+
   const handleSuccess = useCallback(
     (dest: string) => {
       setOpen(false);

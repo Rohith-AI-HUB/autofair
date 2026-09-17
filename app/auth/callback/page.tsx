@@ -15,20 +15,21 @@ function CallbackHandler() {
 
   useEffect(() => {
     const code = params.get('code');
+    const oauthError = params.get('error_description') ?? params.get('error');
     const next = params.get('next') ?? '/my-listings';
+
+    if (oauthError) {
+      setError(oauthError);
+      return;
+    }
+
     if (!code) {
       setError('This sign-in link is invalid or has expired. Start again from the sign-in page.');
       return;
     }
-    // The shared client has URL detection disabled, so this is the one and
-    // only place a PKCE code is exchanged. This avoids a second exchange
-    // consuming an already-removed verifier.
-    const sb = getBrowserClient(getRememberChoice() ? 'local' : 'session');
-    if (!sb) {
-      setError('Auth is not connected yet. Add your Supabase keys, then try again.');
-      return;
-    }
+
     let cancelled = false;
+
     const finish = async () => {
       // Trusted role home first (admin->/admin, staff->/staff). An explicit
       // non-default next is honored only if the role is allowed there.
@@ -49,25 +50,54 @@ function CallbackHandler() {
       }
       router.refresh();
     };
-    void sb.auth
-      .exchangeCodeForSession(code)
-      .then(({ error }) => {
-        if (cancelled) return;
-        if (error) {
-          // A stale callback or cleared storage has no verifier to exchange.
-          // It is a normal restart condition, not a server/database failure.
-          if (error.code === 'pkce_code_verifier_not_found') {
-            setError('Your sign-in session expired. Please start sign-in again in this browser.');
-          } else {
-            setError(getSafeAuthMessage(error));
+
+    const runExchange = async () => {
+      const preferred = getRememberChoice()
+        ? (['local', 'session'] as const)
+        : (['session', 'local'] as const);
+      let lastErr: unknown = null;
+
+      for (const store of preferred) {
+        const sb = getBrowserClient(store);
+        if (!sb) continue;
+        try {
+          const { error: exchangeErr } = await sb.auth.exchangeCodeForSession(code);
+          if (!exchangeErr) {
+            if (!cancelled) await finish();
+            return;
           }
-          return;
+          lastErr = exchangeErr;
+          // If code verifier is not found in this store, try the other store
+          if (
+            typeof exchangeErr === 'object' &&
+            exchangeErr !== null &&
+            'code' in exchangeErr &&
+            (exchangeErr as { code?: string }).code !== 'pkce_code_verifier_not_found'
+          ) {
+            break;
+          }
+        } catch (e) {
+          lastErr = e;
         }
-        void finish();
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(getSafeAuthMessage(e, 'Sign-in failed. Try again.'));
-      });
+      }
+
+      if (cancelled) return;
+      if (
+        lastErr &&
+        typeof lastErr === 'object' &&
+        'code' in lastErr &&
+        (lastErr as { code?: string }).code === 'pkce_code_verifier_not_found'
+      ) {
+        setError('Your sign-in session expired. Please start sign-in again in this browser.');
+      } else if (lastErr) {
+        setError(getSafeAuthMessage(lastErr));
+      } else {
+        setError('Auth is not connected yet. Add your Supabase keys, then try again.');
+      }
+    };
+
+    void runExchange();
+
     return () => {
       cancelled = true;
     };
