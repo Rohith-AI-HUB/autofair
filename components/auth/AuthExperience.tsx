@@ -17,9 +17,6 @@ export function AuthExperience() {
         <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
           ACCOUNT&nbsp;&nbsp;•&nbsp;&nbsp;SIGN IN / SIGN UP
         </p>
-        <p className="font-mono text-[10px] tracking-[0.04em] text-muted">
-          SECURE&nbsp;&nbsp;•&nbsp;&nbsp;SUPABASE AUTH&nbsp;&nbsp;•&nbsp;&nbsp;AF-2026
-        </p>
       </div>
 
       <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">

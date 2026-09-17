@@ -58,7 +58,7 @@ export function AuthModal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="relative max-h-[90vh] w-full max-w-[440px] overflow-y-auto rounded-[4px] border border-line bg-white p-6 shadow-[0_24px_80px_rgba(11,23,38,0.35)] outline-none transition-all duration-200 sm:p-7"
+        className="relative max-h-[92vh] w-full max-w-[440px] overflow-y-auto rounded-[4px] border border-line bg-white p-6 shadow-[0_24px_80px_rgba(11,23,38,0.35)] outline-none transition-all duration-200 sm:p-7"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <p className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">
@@ -74,9 +74,6 @@ export function AuthModal({
           </button>
         </div>
         <AuthForm initialMode={initialMode} next={next} onSuccess={onSuccess} hideTrustRow />
-        <p className="mt-4 text-center font-mono text-[10px] text-muted">
-          SECURE&nbsp;&nbsp;•&nbsp;&nbsp;SUPABASE AUTH
-        </p>
       </div>
     </div>
   );

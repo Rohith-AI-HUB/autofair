@@ -490,7 +490,7 @@ export function isLeakyMessage(msg: unknown): boolean {
  * DbOperationError, otherwise a generic fallback unless the original
  * message is provably non-leaky AND short (to avoid showing driver text).
  */
-export function getSafeErrorMessage(err: unknown, fallback = SAFE_MESSAGES.INTERNAL): string {
+export function getSafeErrorMessage(err: unknown, fallback: string = SAFE_MESSAGES.INTERNAL): string {
   if (err instanceof DbOperationError) return err.userMessage;
   if (
     err &&
@@ -527,7 +527,7 @@ export function getSafeErrorMessage(err: unknown, fallback = SAFE_MESSAGES.INTER
  * fall back to a generic message; otherwise preserve the original text so
  * sign-in / sign-up UX keeps its helpful errors.
  */
-export function getSafeAuthMessage(err: unknown, fallback = SAFE_MESSAGES.INTERNAL): string {
+export function getSafeAuthMessage(err: unknown, fallback: string = SAFE_MESSAGES.INTERNAL): string {
   if (err instanceof DbOperationError) return err.userMessage;
   const rawMsg =
     err && typeof err === 'object' && 'message' in (err as Record<string, unknown>)

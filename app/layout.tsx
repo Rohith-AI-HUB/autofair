@@ -37,11 +37,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" className={`${manrope.variable} ${plexMono.variable}`}>
-      <body className="font-sans">
+    <html lang="en" data-scroll-behavior="smooth" className={`${manrope.variable} ${plexMono.variable} overflow-x-hidden`}>
+      <body className="font-sans overflow-x-hidden">
         <LedgerBar />
         <Navbar />
-        <main>{children}</main>
+        <main className="overflow-x-hidden">{children}</main>
         <Footer />
         <AuthModalHost />
       </body>

@@ -73,7 +73,7 @@ export function AuthForm({
     // is honored only if the role is actually allowed there, otherwise the
     // role home wins. This fixes admins landing on staff/customer pages.
     const home = await getPostLoginDestination();
-    let dest = home;
+    let dest: string = home;
     if (next && next.startsWith('/')) {
       const { fetchCurrentProfile, isPathAllowedForRole } = await import('@/lib/auth/roles');
       const profile = await fetchCurrentProfile().catch(() => null);
