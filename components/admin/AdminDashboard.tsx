@@ -165,8 +165,8 @@ export function AdminDashboard() {
       setAddErr('Enter a valid email address.');
       return;
     }
-    if (!addPw || addPw.length < 6) {
-      setAddErr('Password must be at least 6 characters. It is hashed on the server and never shown again.');
+    if (!addPw || addPw.length < 12 || !/[a-z]/.test(addPw) || !/[A-Z]/.test(addPw) || !/\d/.test(addPw) || !/[^A-Za-z0-9]/.test(addPw)) {
+      setAddErr('Use at least 12 characters with uppercase, lowercase, a number, and a symbol. It is hashed on the server and never shown again.');
       return;
     }
     setBusy('add-staff');
@@ -258,8 +258,8 @@ export function AdminDashboard() {
 
   async function confirmPasswordReset() {
     if (!resettingPassword) return;
-    if (newStaffPassword.length < 6) {
-      setResetPasswordError('Password must be at least 6 characters.');
+    if (newStaffPassword.length < 12 || !/[a-z]/.test(newStaffPassword) || !/[A-Z]/.test(newStaffPassword) || !/\d/.test(newStaffPassword) || !/[^A-Za-z0-9]/.test(newStaffPassword)) {
+      setResetPasswordError('Use at least 12 characters with uppercase, lowercase, a number, and a symbol.');
       return;
     }
     setBusy(`password-${resettingPassword.id}`);
@@ -770,8 +770,8 @@ export function AdminDashboard() {
               <input value={addEmail} onChange={(e) => setAddEmail(e.target.value)} type="email" placeholder="staff@example.com" className={`${inputCls} mt-1.5`} />
             </label>
             <label className="block">
-              <span className="font-mono text-[10px] text-muted">PASSWORD (MIN 6 CHARS) *</span>
-              <input value={addPw} onChange={(e) => setAddPw(e.target.value)} type="password" autoComplete="new-password" placeholder="Set an initial password" className={`${inputCls} mt-1.5`} />
+              <span className="font-mono text-[10px] text-muted">PASSWORD (12+ CHARS) *</span>
+              <input value={addPw} onChange={(e) => setAddPw(e.target.value)} type="password" autoComplete="new-password" minLength={12} placeholder="Mixed case, number, symbol" className={`${inputCls} mt-1.5`} />
             </label>
             {addErr && <p role="alert" className="border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">{addErr}</p>}
             <div className="flex gap-3">
@@ -830,9 +830,9 @@ export function AdminDashboard() {
         <Modal title={`Set password for ${resettingPassword.fullName}`} sub="For internal staff accounts without a deliverable email inbox." onClose={() => setResettingPassword(null)}>
           <label className="block">
             <span className="font-mono text-[10px] text-muted">NEW PASSWORD *</span>
-            <input type="password" value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} minLength={6} className={`${inputCls} mt-1.5`} />
+            <input type="password" value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} minLength={12} className={`${inputCls} mt-1.5`} />
           </label>
-          <p className="mt-2 font-sans text-[12px] text-muted">Use a strong password and share it securely. It is stored only as a hash and cannot be viewed again.</p>
+          <p className="mt-2 font-sans text-[12px] text-muted">Use at least 12 characters with uppercase, lowercase, a number, and a symbol. Share it securely; it is stored only as a hash and cannot be viewed again.</p>
           {resetPasswordError && <p role="alert" className="mt-3 border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">{resetPasswordError}</p>}
           <div className="mt-4 flex gap-3">
             <button type="button" onClick={() => setResettingPassword(null)} className="flex-1 border border-navy/30 px-4 py-3 font-sans text-[14px] font-bold text-navy hover:border-navy">Cancel</button>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 import { getServiceClient } from '@/lib/supabase/service';
+import { isStrongStaffPassword, STAFF_PASSWORD_MESSAGE } from '@/lib/auth/password-policy';
 
 const STAFF_ROLES = ['staff'];
 const ACTIVE = ['Pending', 'Assigned', 'In Progress'];
@@ -138,8 +139,8 @@ export async function POST(req: Request) {
     if (!isValidEmail(email)) {
       return NextResponse.json({ error: { message: 'Enter a valid email address.', code: 'VALIDATION' } }, { status: 422 });
     }
-    if (!password || password.length < 6) {
-      return NextResponse.json({ error: { message: 'Password must be at least 6 characters.', code: 'VALIDATION' } }, { status: 422 });
+    if (!isStrongStaffPassword(password)) {
+      return NextResponse.json({ error: { message: STAFF_PASSWORD_MESSAGE, code: 'VALIDATION' } }, { status: 422 });
     }
 
     const svc = getServiceClient();

@@ -333,16 +333,13 @@ export async function createVehicleRow(
     });
   }
 
-  // Self-heal: you signed up before the migration ran, so no profiles row exists yet.
-  // Upsert is safe under RLS (own id).
-  const userEmail = sessionData.session?.user?.email ?? null;
-  const { error: profErr } = await sb.from('profiles').upsert(
-    { id: sellerId, full_name: userEmail ? userEmail.split('@')[0] : null },
-    { onConflict: 'id' }
-  );
-  if (profErr) {
-    const classified = classifyDbError(profErr);
-    throw new DbOperationError('profiles.upsert', profErr, {
+  // Profiles are created by the trusted Auth trigger. Browser-side upserts
+  // would permit operational profile fields to be altered by the caller.
+  const { data: profile, error: profErr } = await sb.from('profiles').select('id').eq('id', sellerId).maybeSingle();
+  if (profErr || !profile) {
+    const cause = profErr ?? new Error('Profile missing');
+    const classified = classifyDbError(cause);
+    throw new DbOperationError('profiles.fetchForVehicle', cause, {
       ...(classified.code === 'INTERNAL'
         ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PROFILE_SETUP_FAILED }
         : {}),

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
+import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 
 /**
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
   try {
     const ctx = await requireAuth(req);
     requireRoles(ctx, ['ADMIN']);
+    const svc = getServiceClient();
+    if (!svc) throw { status: 503, message: 'The assignment service is temporarily unavailable.' };
 
     const { data: pending, error: qErr } = await ctx.sb
       .from('vehicles')
@@ -26,7 +29,7 @@ export async function POST(req: Request) {
     const details: Array<{ vehicleId: string; regNumber: string; staffId: string | null }> = [];
 
     for (const v of rows) {
-      const { data: pick, error: aErr } = await ctx.sb.rpc('assign_inspection_to_least_loaded', {
+      const { data: pick, error: aErr } = await svc.rpc('assign_inspection_to_least_loaded', {
         p_vehicle_id: v.id,
         p_assignment_type: 'Automatic',
         p_reason: 'Bulk auto-assign from admin dashboard',

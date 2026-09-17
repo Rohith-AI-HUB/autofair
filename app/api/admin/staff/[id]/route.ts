@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 import { getServiceClient } from '@/lib/supabase/service';
+import { isStrongStaffPassword, STAFF_PASSWORD_MESSAGE } from '@/lib/auth/password-policy';
 
 /**
  * PATCH /api/admin/staff/[id] — edit name / activate / deactivate (ADMIN only).
@@ -48,7 +49,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     let reassigned = 0;
     const wasActive = ((existing as { is_active: boolean | null }).is_active ?? true);
     if (patch.is_active === false && wasActive) {
-      const { data: count, error: rErr } = await ctx.sb.rpc('reassign_staff_inspections', {
+      const svc = getServiceClient();
+      if (!svc) throw { status: 503, message: 'The assignment service is temporarily unavailable.' };
+      const { data: count, error: rErr } = await svc.rpc('reassign_staff_inspections', {
         p_staff_id: id,
         p_reason: 'Staff deactivated',
         p_actor_id: ctx.userId,
@@ -143,8 +146,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const body = (await req.json().catch(() => null)) as { password?: unknown } | null;
     const password = typeof body?.password === 'string' ? body.password : '';
     if (!id) return NextResponse.json({ error: { message: 'The requested item was not found.', code: 'NOT_FOUND' } }, { status: 404 });
-    if (password.length < 6) {
-      return NextResponse.json({ error: { message: 'Password must be at least 6 characters.', code: 'VALIDATION' } }, { status: 422 });
+    if (!isStrongStaffPassword(password)) {
+      return NextResponse.json({ error: { message: STAFF_PASSWORD_MESSAGE, code: 'VALIDATION' } }, { status: 422 });
     }
     const svc = getServiceClient();
     if (!svc) return NextResponse.json({ error: { message: 'Password reset is temporarily unavailable.', code: 'UNAVAILABLE' } }, { status: 503 });

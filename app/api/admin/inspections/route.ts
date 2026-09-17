@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
+import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 
 const INSPECTION_STATUSES = ['Pending', 'Assigned', 'In Progress', 'Completed', 'Cancelled'] as const;
@@ -96,6 +97,8 @@ export async function POST(req: Request) {
   try {
     const ctx = await requireAuth(req);
     requireRoles(ctx, ['ADMIN']);
+    const svc = getServiceClient();
+    if (!svc) throw { status: 503, message: 'The assignment service is temporarily unavailable.' };
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const reg = typeof body?.regNumber === 'string' ? body.regNumber.toUpperCase().trim() : '';
@@ -146,7 +149,7 @@ export async function POST(req: Request) {
     // Backend auto-assign (DB trigger also fires; rpc is idempotent and guarantees assignment even if trigger was skipped).
     let assigned: string | null = (inserted as { assigned_staff_id: string | null }).assigned_staff_id ?? null;
     try {
-      const { data: pick, error: aErr } = await ctx.sb.rpc('assign_inspection_to_least_loaded', {
+      const { data: pick, error: aErr } = await svc.rpc('assign_inspection_to_least_loaded', {
         p_vehicle_id: vid,
         p_assignment_type: 'Automatic',
         p_reason: 'Auto-assigned on creation',

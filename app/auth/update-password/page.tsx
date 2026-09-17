@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
+import { isStrongStaffPassword, STAFF_PASSWORD_MESSAGE } from '@/lib/auth/password-policy';
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -16,8 +17,8 @@ export default function UpdatePasswordPage() {
 
   async function submit() {
     setError(null);
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (!isStrongStaffPassword(password)) {
+      setError(STAFF_PASSWORD_MESSAGE);
       return;
     }
     const sb = getBrowserClient('local');
@@ -68,7 +69,7 @@ export default function UpdatePasswordPage() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder="12+ characters with mixed case, number, symbol"
                 className="mt-1.5 w-full border border-line bg-off-white px-4 py-[15px] font-sans text-[14px] text-navy outline-none placeholder:text-[#9AA8B5] focus:border-teal"
               />
             </div>

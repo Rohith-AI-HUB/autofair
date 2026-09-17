@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
+import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 
 /**
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
   try {
     const ctx = await requireAuth(req);
     requireRoles(ctx, ['ADMIN']);
+    const svc = getServiceClient();
+    if (!svc) throw { status: 503, message: 'The assignment service is temporarily unavailable.' };
 
     const body = (await req.json().catch(() => null)) as { vehicleId?: unknown; staffId?: unknown; reason?: unknown } | null;
     const vehicleId = typeof body?.vehicleId === 'string' ? body.vehicleId : '';
@@ -24,7 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: { message: 'Enter a reason for the manual override. It is saved in the audit log.', code: 'VALIDATION' } }, { status: 422 });
     }
 
-    const { data: pick, error: mErr } = await ctx.sb.rpc('manual_assign_inspection', {
+    const { data: pick, error: mErr } = await svc.rpc('manual_assign_inspection', {
       p_vehicle_id: vehicleId,
       p_target_staff_id: staffId,
       p_reason: reason,
