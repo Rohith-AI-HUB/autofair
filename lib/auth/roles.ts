@@ -1,4 +1,4 @@
-import { getBrowserClient } from '@/lib/supabase/client';
+import { getBrowserClient, getSessionFromAnyStore } from '@/lib/supabase/client';
 import { logDbError } from '@/lib/errors/db-error';
 
 /**
@@ -88,12 +88,16 @@ export interface CurrentProfile {
  */
 export async function fetchCurrentProfile(): Promise<CurrentProfile | null> {
   try {
-    const sb =
-      getBrowserClient('local') ?? getBrowserClient('session');
-    if (!sb || typeof window === 'undefined') return null;
-    const { data: sessionData } = await sb.auth.getSession();
-    const user = sessionData.session?.user;
+    if (typeof window === 'undefined') return null;
+    // The browser can persist a session in localStorage or sessionStorage.
+    // Query the profile through the exact client that contains the session;
+    // choosing the merely available localStorage client makes a valid
+    // session-only login appear signed out.
+    const { session, persist } = await getSessionFromAnyStore();
+    const user = session?.user;
     if (!user) return null;
+    const sb = getBrowserClient(persist);
+    if (!sb) return null;
     const { data, error } = await sb.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
     if (error) {
       logDbError('profiles.fetchRole', error);

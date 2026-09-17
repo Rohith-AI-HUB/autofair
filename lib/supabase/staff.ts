@@ -1,6 +1,6 @@
 'use client';
 
-import { getBrowserClient } from '@/lib/supabase/client';
+import { getSessionFromAnyStore } from '@/lib/supabase/client';
 import { DbOperationError, SAFE_MESSAGES } from '@/lib/errors/db-error';
 import type { DbListing, DbVehicle } from '@/lib/supabase/db-types';
 
@@ -11,16 +11,8 @@ export interface StaffAssignment {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
-  if (!sb) {
-    throw new DbOperationError('staff.auth', new Error('Supabase not configured'), {
-      status: 503,
-      code: 'UNAVAILABLE',
-      userMessage: SAFE_MESSAGES.UNAVAILABLE,
-    });
-  }
-  const { data } = await sb.auth.getSession();
-  const token = data.session?.access_token;
+  const { session } = await getSessionFromAnyStore();
+  const token = session?.access_token;
   if (!token) {
     throw new DbOperationError('staff.auth', new Error('Missing session'), {
       status: 401,

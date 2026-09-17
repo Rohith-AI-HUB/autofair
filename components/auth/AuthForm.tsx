@@ -92,9 +92,12 @@ export function AuthForm({
   async function continueWithGoogle() {
     setError(null);
     setNotice(null);
-    const sb = needClient();
-    if (!sb) return;
+    // Persist the choice before constructing the client. OAuth PKCE stores
+    // its verifier in that client's storage, and the callback must reopen
+    // the same store even in a different browser/profile.
     setRememberChoice(remember);
+    const sb = needClient(remember ? 'local' : 'session');
+    if (!sb) return;
     setBusy('google');
     const { error } = await sb.auth.signInWithOAuth({
       provider: 'google',
@@ -126,9 +129,9 @@ export function AuthForm({
       setError(problem);
       return;
     }
-    const sb = needClient();
-    if (!sb) return;
     setRememberChoice(remember);
+    const sb = needClient(remember ? 'local' : 'session');
+    if (!sb) return;
     setBusy('email');
     if (mode === 'signin') {
       const { error } = await sb.auth.signInWithPassword({

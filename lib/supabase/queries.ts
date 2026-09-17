@@ -259,11 +259,6 @@ export async function deleteMyVehicle(vehicleId: string): Promise<void> {
 // and auth callback (Google). The role is read from profiles, never storage.
 export async function getPostLoginDestination(): Promise<'/' | '/admin' | '/staff'> {
   try {
-    const sb = getBrowserClient('local') ?? getBrowserClient('session');
-    if (!sb || typeof window === 'undefined') return '/';
-    const { data: sessionData } = await sb.auth.getSession();
-    const uid = sessionData.session?.user?.id;
-    if (!uid) return '/';
     // fetchCurrentProfile reads profiles.role from the backend. A missing or
     // invalid profile is not promoted to any internal role.
     const profile = await fetchCurrentProfile().catch(() => null);
@@ -319,7 +314,7 @@ export interface SellInput {
 
 export async function createVehicleRow(
   input: SellInput
-): Promise<{ vehicleId: string; inspectionId: string }> {
+): Promise<{ vehicleId: string; inspectionId: string; autoAssigned: boolean }> {
   const sb = getBrowserClient('local') ?? getBrowserClient('session');
   if (!sb) {
     throw new DbOperationError('vehicles.create', new Error('Supabase not configured'), {
@@ -388,10 +383,24 @@ export async function createVehicleRow(
       context: { year: input.year, fuel: input.fuel, transmission: input.transmission },
     });
   }
-  return {
-    vehicleId: (vehicle as { id: string }).id,
-    inspectionId: (vehicle as { inspection_id: string }).inspection_id,
-  };
+  const vehicleId = (vehicle as { id: string }).id;
+  let autoAssigned = false;
+  try {
+    // The protected server endpoint supplies the fallback for deployments
+    // where the DB insert trigger has not yet been applied. It verifies the
+    // customer owns this vehicle before running the atomic assignment logic.
+    const assignment = await fetch('/api/inspections/assign', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vehicleId }),
+    });
+    const payload = (await assignment.json().catch(() => null)) as { data?: { assigned?: boolean } } | null;
+    autoAssigned = Boolean(assignment.ok && payload?.data?.assigned);
+  } catch {
+    // Submission succeeds even if no staff is active or an assignment retry is
+    // required. The admin-only bulk action remains a safe recovery path.
+  }
+  return { vehicleId, inspectionId: (vehicle as { inspection_id: string }).inspection_id, autoAssigned };
 }
 
 export async function addVehiclePhotoRows(

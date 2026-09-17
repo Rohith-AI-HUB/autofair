@@ -39,10 +39,10 @@ export function useAuth(): AuthState {
       setEmail(null);
       setUserId(null);
       setRole(null);
-      await Promise.allSettled([
-        getBrowserClient('local')?.auth.signOut(),
-        getBrowserClient('session')?.auth.signOut(),
-      ]);
+      // Do not call global Supabase logout here. A profile read can race an
+      // OAuth callback, and that global request can reject a newly issued
+      // token with 403. The app stays unauthenticated and protected APIs
+      // independently reject any invalid session.
       setReady(true);
       return;
     }

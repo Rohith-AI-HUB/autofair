@@ -1,6 +1,6 @@
 'use client';
 
-import { getBrowserClient } from '@/lib/supabase/client';
+import { getSessionFromAnyStore } from '@/lib/supabase/client';
 import { DbOperationError, SAFE_MESSAGES } from '@/lib/errors/db-error';
 
 export interface WorkloadEntry {
@@ -75,16 +75,8 @@ export interface AuditEntry {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
-  if (!sb) {
-    throw new DbOperationError('admin.auth', new Error('Supabase not configured'), {
-      status: 503,
-      code: 'UNAVAILABLE',
-      userMessage: SAFE_MESSAGES.UNAVAILABLE,
-    });
-  }
-  const { data } = await sb.auth.getSession();
-  const token = data.session?.access_token;
+  const { session } = await getSessionFromAnyStore();
+  const token = session?.access_token;
   if (!token) {
     throw new DbOperationError('admin.auth', new Error('Missing session'), {
       status: 401,
@@ -141,6 +133,14 @@ export function createAdminStaff(input: { fullName: string; email: string; passw
 
 export function updateAdminStaff(id: string, patch: { fullName?: string; isActive?: boolean }): Promise<{ id: string; fullName: string; email: string | null; isActive: boolean; reassigned: number }> {
   return sendJson(`/api/admin/staff/${id}`, 'PATCH', patch);
+}
+
+export function deleteAdminStaff(id: string): Promise<{ id: string; fullName: string; reassigned: number }> {
+  return sendJson(`/api/admin/staff/${id}`, 'DELETE', undefined);
+}
+
+export function resetAdminStaffPassword(id: string, password: string): Promise<{ id: string; fullName: string }> {
+  return sendJson(`/api/admin/staff/${id}`, 'PUT', { password });
 }
 
 export function fetchAdminInspections(status = '', q = ''): Promise<AdminInspection[]> {

@@ -66,7 +66,13 @@ export async function getSessionFromAnyStore(): Promise<{
   // Never throws raw auth/DB errors to callers. Failures are logged and
   // treated as "no session" so UI falls back safely (guest garage, etc.).
   try {
-    for (const persist of ['local', 'session'] as const) {
+    // Honour the persistence choice used for the current login. Checking
+    // local storage first unconditionally lets a stale remembered session
+    // override a newly authenticated session-only admin/staff account.
+    const preferred: readonly PersistChoice[] = getRememberChoice()
+      ? ['local', 'session']
+      : ['session', 'local'];
+    for (const persist of preferred) {
       const sb = getBrowserClient(persist);
       if (!sb) return { session: null, persist: 'local' };
       const { data } = await sb.auth.getSession();

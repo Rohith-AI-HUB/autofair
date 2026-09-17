@@ -6,11 +6,13 @@ import { getSafeErrorMessage } from '@/lib/errors/db-error';
 import {
   createAdminInspection,
   createAdminStaff,
+  deleteAdminStaff,
   fetchAdminInspections,
   fetchAdminOverview,
   fetchAdminStaff,
   fetchAuditLog,
   manualOverride,
+  resetAdminStaffPassword,
   runAutoAssign,
   updateAdminStaff,
   updateInspectionStatus,
@@ -93,6 +95,10 @@ export function AdminDashboard() {
   const [editErr, setEditErr] = useState<string | null>(null);
 
   const [deactivating, setDeactivating] = useState<AdminStaff | null>(null);
+  const [deleting, setDeleting] = useState<AdminStaff | null>(null);
+  const [resettingPassword, setResettingPassword] = useState<AdminStaff | null>(null);
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
 
   const [showNewInsp, setShowNewInsp] = useState(false);
   const [nReg, setNReg] = useState('');
@@ -231,6 +237,45 @@ export function AdminDashboard() {
     }
   }
 
+  async function confirmDeleteStaff() {
+    if (!deleting) return;
+    setBusy(`delete-${deleting.id}`);
+    try {
+      const res = await deleteAdminStaff(deleting.id);
+      setDeleting(null);
+      setNotice(
+        res.reassigned > 0
+          ? `${res.fullName} was deleted. ${res.reassigned} upcoming inspection${res.reassigned === 1 ? '' : 's'} automatically reassigned by workload.`
+          : `${res.fullName} was deleted.`
+      );
+      await refresh();
+    } catch (err) {
+      setPageError(getSafeErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function confirmPasswordReset() {
+    if (!resettingPassword) return;
+    if (newStaffPassword.length < 6) {
+      setResetPasswordError('Password must be at least 6 characters.');
+      return;
+    }
+    setBusy(`password-${resettingPassword.id}`);
+    setResetPasswordError(null);
+    try {
+      const res = await resetAdminStaffPassword(resettingPassword.id, newStaffPassword);
+      setResettingPassword(null);
+      setNewStaffPassword('');
+      setNotice(`New password set for ${res.fullName}. Share it with the staff member securely.`);
+    } catch (err) {
+      setResetPasswordError(getSafeErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleRunAssign() {
     setBusy('run-assign');
     setNotice(null);
@@ -363,7 +408,7 @@ export function AdminDashboard() {
         </div>
         <button
           type="button"
-          onClick={() => void refresh()}
+          onClick={() => void refresh(true)}
           disabled={loading}
           className="border border-navy/30 px-5 py-2.5 font-sans text-[13px] font-bold text-navy hover:border-navy disabled:opacity-60"
         >
@@ -633,11 +678,25 @@ export function AdminDashboard() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => { setResettingPassword(s); setNewStaffPassword(''); setResetPasswordError(null); }}
+                              className="border border-navy/30 px-3 py-1.5 font-sans text-[12px] font-bold text-navy hover:border-navy"
+                            >
+                              Set password
+                            </button>
+                            <button
+                              type="button"
                               disabled={busy === `toggle-${s.id}`}
                               onClick={() => void handleToggleActive(s)}
                               className={`px-3 py-1.5 font-sans text-[12px] font-bold ${s.isActive ? 'border border-coral/60 text-[#9B2C2C] hover:border-coral' : 'bg-navy text-white hover:bg-navy-2'} disabled:opacity-60`}
                             >
                               {busy === `toggle-${s.id}` ? '…' : s.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleting(s)}
+                              className="border border-coral/60 px-3 py-1.5 font-sans text-[12px] font-bold text-[#9B2C2C] hover:border-coral"
+                            >
+                              Delete
                             </button>
                           </div>
                         </td>
@@ -750,6 +809,35 @@ export function AdminDashboard() {
             <button type="button" onClick={() => setDeactivating(null)} className="flex-1 border border-navy/30 px-4 py-3 font-sans text-[14px] font-bold text-navy hover:border-navy">Keep active</button>
             <button type="button" disabled={busy === `toggle-${deactivating.id}`} onClick={confirmDeactivate} className="flex-1 bg-[#9B2C2C] px-4 py-3 font-sans text-[14px] font-bold text-white hover:opacity-90 disabled:opacity-60">
               {busy === `toggle-${deactivating.id}` ? 'Reassigning…' : 'Deactivate + reassign'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleting && (
+        <Modal title={`Delete ${deleting.fullName}?`} sub="This permanently removes their sign-in account and staff profile. Active inspections are reassigned first." onClose={() => setDeleting(null)}>
+          <p className="font-sans text-[14px] text-navy">This cannot be undone. Their current load is <strong>{deleting.load} active inspection{deleting.load === 1 ? '' : 's'}</strong>.</p>
+          <div className="mt-4 flex gap-3">
+            <button type="button" onClick={() => setDeleting(null)} className="flex-1 border border-navy/30 px-4 py-3 font-sans text-[14px] font-bold text-navy hover:border-navy">Cancel</button>
+            <button type="button" disabled={busy === `delete-${deleting.id}`} onClick={confirmDeleteStaff} className="flex-1 bg-[#9B2C2C] px-4 py-3 font-sans text-[14px] font-bold text-white hover:opacity-90 disabled:opacity-60">
+              {busy === `delete-${deleting.id}` ? 'Reassigning + deleting…' : 'Delete staff'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {resettingPassword && (
+        <Modal title={`Set password for ${resettingPassword.fullName}`} sub="For internal staff accounts without a deliverable email inbox." onClose={() => setResettingPassword(null)}>
+          <label className="block">
+            <span className="font-mono text-[10px] text-muted">NEW PASSWORD *</span>
+            <input type="password" value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} minLength={6} className={`${inputCls} mt-1.5`} />
+          </label>
+          <p className="mt-2 font-sans text-[12px] text-muted">Use a strong password and share it securely. It is stored only as a hash and cannot be viewed again.</p>
+          {resetPasswordError && <p role="alert" className="mt-3 border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">{resetPasswordError}</p>}
+          <div className="mt-4 flex gap-3">
+            <button type="button" onClick={() => setResettingPassword(null)} className="flex-1 border border-navy/30 px-4 py-3 font-sans text-[14px] font-bold text-navy hover:border-navy">Cancel</button>
+            <button type="button" disabled={busy === `password-${resettingPassword.id}`} onClick={confirmPasswordReset} className="flex-1 bg-navy px-4 py-3 font-sans text-[14px] font-bold text-white hover:bg-navy-2 disabled:opacity-60">
+              {busy === `password-${resettingPassword.id}` ? 'Saving…' : 'Set password'}
             </button>
           </div>
         </Modal>

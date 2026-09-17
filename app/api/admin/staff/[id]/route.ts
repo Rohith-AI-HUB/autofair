@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { getServiceClient } from '@/lib/supabase/service';
 
 /**
  * PATCH /api/admin/staff/[id] — edit name / activate / deactivate (ADMIN only).
@@ -77,6 +78,91 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const { status: s, body } = toSafeApiPayload('admin.staff.update', err);
     logDbError('admin.staff.update', err);
+    return NextResponse.json(body, { status: s });
+  }
+}
+
+/**
+ * DELETE /api/admin/staff/[id] — permanently remove a staff account (ADMIN only).
+ * Active inspections are reassigned before Auth deletion cascades the profile.
+ */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await requireAuth(req);
+    requireRoles(ctx, ['ADMIN']);
+    const { id } = await params;
+    if (!id) return NextResponse.json({ error: { message: 'The requested item was not found.', code: 'NOT_FOUND' } }, { status: 404 });
+
+    const svc = getServiceClient();
+    if (!svc) {
+      return NextResponse.json({ error: { message: 'Staff deletion is temporarily unavailable.', code: 'UNAVAILABLE' } }, { status: 503 });
+    }
+    const { data: staff, error: staffError } = await svc
+      .from('profiles')
+      .select('id,full_name,role,is_active')
+      .eq('id', id)
+      .maybeSingle();
+    if (staffError) throw staffError;
+    const row = staff as { id: string; full_name: string | null; role: string | null; is_active: boolean | null } | null;
+    if (!row || row.role !== 'staff') {
+      return NextResponse.json({ error: { message: 'The requested staff member was not found.', code: 'NOT_FOUND' } }, { status: 404 });
+    }
+
+    // Exclude the departing staff member before reassigning, otherwise the
+    // least-load function could select them again.
+    const { error: deactivateError } = await svc.from('profiles').update({ is_active: false }).eq('id', id);
+    if (deactivateError) throw deactivateError;
+    const { data: count, error: reassignmentError } = await svc.rpc('reassign_staff_inspections', {
+      p_staff_id: id,
+      p_reason: 'Staff account deleted',
+      p_actor_id: ctx.userId,
+    });
+    if (reassignmentError) throw reassignmentError;
+
+    const { error: deleteError } = await svc.auth.admin.deleteUser(id);
+    if (deleteError) throw deleteError;
+    return NextResponse.json({ data: { id, fullName: row.full_name ?? 'Unnamed staff', reassigned: typeof count === 'number' ? count : 0 } });
+  } catch (err) {
+    const status = err && typeof err === 'object' && 'status' in (err as Record<string, unknown>) ? Number((err as { status: number }).status) : undefined;
+    if (status === 401 || status === 403) {
+      const msg = err && typeof err === 'object' && 'message' in (err as Record<string, unknown>) ? String((err as { message: unknown }).message) : 'Something went wrong. Please try again later.';
+      return NextResponse.json({ error: { message: msg, code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN' } }, { status });
+    }
+    const { status: s, body } = toSafeApiPayload('admin.staff.delete', err);
+    logDbError('admin.staff.delete', err);
+    return NextResponse.json(body, { status: s });
+  }
+}
+
+/** PUT /api/admin/staff/[id] — admin-set staff password for internal accounts. */
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await requireAuth(req);
+    requireRoles(ctx, ['ADMIN']);
+    const { id } = await params;
+    const body = (await req.json().catch(() => null)) as { password?: unknown } | null;
+    const password = typeof body?.password === 'string' ? body.password : '';
+    if (!id) return NextResponse.json({ error: { message: 'The requested item was not found.', code: 'NOT_FOUND' } }, { status: 404 });
+    if (password.length < 6) {
+      return NextResponse.json({ error: { message: 'Password must be at least 6 characters.', code: 'VALIDATION' } }, { status: 422 });
+    }
+    const svc = getServiceClient();
+    if (!svc) return NextResponse.json({ error: { message: 'Password reset is temporarily unavailable.', code: 'UNAVAILABLE' } }, { status: 503 });
+    const { data: staff, error: staffError } = await svc.from('profiles').select('id,role,full_name').eq('id', id).maybeSingle();
+    if (staffError) throw staffError;
+    const row = staff as { id: string; role: string | null; full_name: string | null } | null;
+    if (!row || row.role !== 'staff') return NextResponse.json({ error: { message: 'The requested staff member was not found.', code: 'NOT_FOUND' } }, { status: 404 });
+    const { error: updateError } = await svc.auth.admin.updateUserById(id, { password });
+    if (updateError) throw updateError;
+    return NextResponse.json({ data: { id, fullName: row.full_name ?? 'Unnamed staff' } });
+  } catch (err) {
+    const status = err && typeof err === 'object' && 'status' in (err as Record<string, unknown>) ? Number((err as { status: number }).status) : undefined;
+    if (status === 401 || status === 403) {
+      const msg = err && typeof err === 'object' && 'message' in (err as Record<string, unknown>) ? String((err as { message: unknown }).message) : 'Something went wrong. Please try again later.';
+      return NextResponse.json({ error: { message: msg, code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN' } }, { status });
+    }
+    const { status: s, body } = toSafeApiPayload('admin.staff.password', err);
+    logDbError('admin.staff.password', err);
     return NextResponse.json(body, { status: s });
   }
 }

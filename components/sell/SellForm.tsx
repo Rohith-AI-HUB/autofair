@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChevronDown, ImagePlus } from 'lucide-react';
 import { Container } from '@/components/shared/Container';
 import { cn } from '@/lib/utils';
@@ -46,6 +47,7 @@ const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
 let photoSeq = 0;
 
 export function SellForm() {
+  const router = useRouter();
   const [f, setF] = useState<Fields>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields | 'photos' | 'submit', string>>>({});
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -54,6 +56,7 @@ export function SellForm() {
   const [submitting, setSubmitting] = useState(false);
   const [inspectionId, setInspectionId] = useState<string | null>(null);
   const [savedToDb, setSavedToDb] = useState(false);
+  const [assignmentStatus, setAssignmentStatus] = useState<'assigned' | 'pending' | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const [scrollPct, setScrollPct] = useState(0);
@@ -157,7 +160,7 @@ export function SellForm() {
     try {
       const year = Number(f.year.trim());
       const km = Number(f.km.replace(/,/g, '').trim());
-      const { vehicleId, inspectionId: newId } = await createVehicleRow({
+      const { vehicleId, inspectionId: newId, autoAssigned } = await createVehicleRow({
         reg: f.reg,
         make: f.make,
         model: f.model,
@@ -175,8 +178,13 @@ export function SellForm() {
       await addVehiclePhotoRows(vehicleId, uploaded);
       invalidateMyVehiclesCache();
       setInspectionId(newId);
+      setAssignmentStatus(autoAssigned ? 'assigned' : 'pending');
       setSavedToDb(true);
       setDone(true);
+      // A completed customer submission belongs in the customer workspace.
+      // Go straight to the garage, where the new file appears as IN REVIEW.
+      router.replace('/my-listings');
+      router.refresh();
     } catch (err) {
       // Never render raw DB/driver text. DbOperationError already carries a
       // safe userMessage; anything else falls back to a generic message.
@@ -200,7 +208,9 @@ export function SellForm() {
           AutoFair will review the information ({f.reg.toUpperCase()} · {f.make}{' '}
           {f.model} · {photos.length} photo{photos.length === 1 ? '' : 's'}).{' '}
           {savedToDb
-            ? `Saved to Supabase. Quote Inspection ID ${inspectionId} on call. Track it in My Listings after sign-in.`
+            ? assignmentStatus === 'assigned'
+              ? `Saved to Supabase and assigned to an inspection staff member. Quote Inspection ID ${inspectionId} on call. Track it in My Listings after sign-in.`
+              : `Saved to Supabase. Your inspection is queued for staff assignment. Quote Inspection ID ${inspectionId} on call. Track it in My Listings after sign-in.`
             : 'Nothing was sent to a backend — this is a frontend prototype. Run the Supabase migration to enable saving.'}
         </p>
         <button
@@ -211,6 +221,7 @@ export function SellForm() {
             setPhotos([]);
             setInspectionId(null);
             setSavedToDb(false);
+            setAssignmentStatus(null);
           }}
           className="mt-5 border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy"
         >
