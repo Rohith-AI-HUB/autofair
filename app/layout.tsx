@@ -5,6 +5,7 @@ import { LedgerBar } from '@/components/layout/LedgerBar';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { AuthModalHost } from '@/components/auth/AuthModalHost';
+import { RoleRouteGate } from '@/components/auth/RoleRouteGate';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -39,10 +40,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth" className={`${manrope.variable} ${plexMono.variable} overflow-x-hidden`}>
       <body className="font-sans overflow-x-hidden">
-        <LedgerBar />
-        <Navbar />
-        <main className="overflow-x-hidden">{children}</main>
-        <Footer />
+        <RoleRouteGate>
+          <LedgerBar />
+          <Navbar />
+          <main className="overflow-x-hidden">{children}</main>
+          <Footer />
+        </RoleRouteGate>
         <AuthModalHost />
       </body>
     </html>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 
-const STAFF_ROLES = ['STAFF', 'staff', 'inspector'];
+const STAFF_ROLES = ['staff'];
 const ACTIVE = ['Pending', 'Assigned', 'In Progress'];
 
 /**

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
 import { getBrowserClient, getRememberChoice } from '@/lib/supabase/client';
 import { getPostLoginDestination } from '@/lib/supabase/queries';
-import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
+import { getSafeAuthMessage } from '@/lib/errors/db-error';
 
 function CallbackHandler() {
   const router = useRouter();
@@ -20,18 +20,16 @@ function CallbackHandler() {
       setError('This sign-in link is invalid or has expired. Start again from the sign-in page.');
       return;
     }
-    // Shared cached client: the local client auto-processes the PKCE code
-    // on init; the session client needs one manual exchange. Either way,
-    // exactly one exchange runs against one client instance.
+    // The shared client has URL detection disabled, so this is the one and
+    // only place a PKCE code is exchanged. This avoids a second exchange
+    // consuming an already-removed verifier.
     const sb = getBrowserClient(getRememberChoice() ? 'local' : 'session');
     if (!sb) {
       setError('Auth is not connected yet. Add your Supabase keys, then try again.');
       return;
     }
-    let done = false;
+    let cancelled = false;
     const finish = async () => {
-      if (done) return;
-      done = true;
       // Trusted role home first (admin->/admin, staff->/staff). An explicit
       // non-default next is honored only if the role is allowed there.
       const home = await getPostLoginDestination();
@@ -51,30 +49,27 @@ function CallbackHandler() {
       }
       router.refresh();
     };
-    sb.auth.getSession().then(({ data }) => {
-      if (data.session) finish();
-    });
-    const { data: listener } = sb.auth.onAuthStateChange((_event, session) => {
-      if (session) finish();
-    });
-    const fallback = window.setTimeout(() => {
-      if (done) return;
-      sb.auth
-        .exchangeCodeForSession(code)
-        .then(({ error }) => {
-          if (error) {
-            if (isLeakyMessage(error.message)) logDbError('auth.exchangeCode', error);
+    void sb.auth
+      .exchangeCodeForSession(code)
+      .then(({ error }) => {
+        if (cancelled) return;
+        if (error) {
+          // A stale callback or cleared storage has no verifier to exchange.
+          // It is a normal restart condition, not a server/database failure.
+          if (error.code === 'pkce_code_verifier_not_found') {
+            setError('Your sign-in session expired. Please start sign-in again in this browser.');
+          } else {
             setError(getSafeAuthMessage(error));
-          } else finish();
-        })
-        .catch((e: unknown) => {
-          setError(getSafeAuthMessage(e, 'Sign-in failed. Try again.'));
-        });
-    }, 1500);
+          }
+          return;
+        }
+        void finish();
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(getSafeAuthMessage(e, 'Sign-in failed. Try again.'));
+      });
     return () => {
-      done = true;
-      window.clearTimeout(fallback);
-      listener.subscription.unsubscribe();
+      cancelled = true;
     };
   }, [params, router]);
 

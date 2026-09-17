@@ -49,12 +49,18 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
   if (error || !user) {
     throw { status: 401, message: 'Please sign in again to continue.' };
   }
-  const { data: profile } = await sb.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const { data: profile, error: profileError } = await sb.from('profiles').select('role').eq('id', user.id).maybeSingle();
   const dbRole = (profile as { role?: string | null } | null)?.role ?? null;
+  const role = mapDbRoleToAppRole(dbRole);
+  if (profileError || !profile || !role) {
+    // A valid JWT alone is not sufficient for application authorization.
+    // Privileged APIs must have a valid, database-backed application role.
+    throw { status: 401, message: 'Please sign in again to continue.' };
+  }
   return {
     userId: user.id,
     email: user.email ?? null,
-    role: mapDbRoleToAppRole(dbRole),
+    role,
     dbRole,
     sb,
   };

@@ -255,34 +255,24 @@ export async function deleteMyVehicle(vehicleId: string): Promise<void> {
 }
 
 // Post-login routing (trusted role first, never frontend-supplied).
-// ADMIN -> /admin, STAFF -> /staff, CUSTOMER -> sellers with vehicles go to
-// /my-listings else /cars. Used by AuthForm (email) + auth callback (Google).
-// Falls back to /my-listings on error so login never blocks (customer-safe;
-// never grants staff/admin on failure).
-export async function getPostLoginDestination(): Promise<'/admin' | '/staff' | '/my-listings' | '/cars'> {
+// ADMIN -> /admin, STAFF -> /staff, CUSTOMER -> /. Used by AuthForm (email)
+// and auth callback (Google). The role is read from profiles, never storage.
+export async function getPostLoginDestination(): Promise<'/' | '/admin' | '/staff'> {
   try {
     const sb = getBrowserClient('local') ?? getBrowserClient('session');
-    if (!sb || typeof window === 'undefined') return '/my-listings';
+    if (!sb || typeof window === 'undefined') return '/';
     const { data: sessionData } = await sb.auth.getSession();
     const uid = sessionData.session?.user?.id;
-    if (!uid) return '/my-listings';
-    // fetchCurrentProfile reads profiles.role from the backend (source of
-    // truth). Unknown/missing safely maps to CUSTOMER, never staff/admin.
+    if (!uid) return '/';
+    // fetchCurrentProfile reads profiles.role from the backend. A missing or
+    // invalid profile is not promoted to any internal role.
     const profile = await fetchCurrentProfile().catch(() => null);
     if (profile?.role === 'ADMIN') return '/admin';
     if (profile?.role === 'STAFF') return '/staff';
-    const { count, error } = await sb
-      .from('vehicles')
-      .select('id', { count: 'exact', head: true })
-      .eq('seller_id', uid);
-    if (error) {
-      logDbError('vehicles.countMine', error);
-      return '/my-listings';
-    }
-    return (count ?? 0) > 0 ? '/my-listings' : '/cars';
+    return '/';
   } catch (err) {
     logDbError('vehicles.countMine', err);
-    return '/my-listings';
+    return '/';
   }
 }
 

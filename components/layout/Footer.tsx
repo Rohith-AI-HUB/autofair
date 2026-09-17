@@ -1,7 +1,16 @@
+'use client';
+
 import Link from 'next/link';
 import { Logo } from '@/components/shared/Logo';
+import { useAuth } from '@/lib/auth/useAuth';
 
 export function Footer() {
+  const { role } = useAuth();
+
+  // Internal workspaces have their own navigation. Do not expose the public
+  // customer site map to an authenticated admin or staff user.
+  if (role === 'ADMIN' || role === 'STAFF') return null;
+
   return (
     <footer className="bg-navy text-white">
       <div className="mx-auto w-full max-w-[1440px] px-5 pb-7 pt-10 md:px-12">

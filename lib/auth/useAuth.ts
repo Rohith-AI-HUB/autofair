@@ -16,8 +16,8 @@ export interface AuthState {
 
 /**
  * Single client auth subscription. Role comes from DB (profiles.role),
- * never trusted from client storage. Defaults to CUSTOMER on read failure
- * so buyer browsing never blocks; staff gates re-check server-side.
+ * never trusted from client storage. A missing or invalid backend profile
+ * invalidates the browser session instead of granting a fallback role.
  */
 export function useAuth(): AuthState {
   const [ready, setReady] = useState(false);
@@ -34,10 +34,21 @@ export function useAuth(): AuthState {
       setReady(true);
       return;
     }
+    const profile = await fetchCurrentProfile();
+    if (!profile) {
+      setEmail(null);
+      setUserId(null);
+      setRole(null);
+      await Promise.allSettled([
+        getBrowserClient('local')?.auth.signOut(),
+        getBrowserClient('session')?.auth.signOut(),
+      ]);
+      setReady(true);
+      return;
+    }
     setEmail(session.user.email ?? null);
     setUserId(session.user.id);
-    const profile = await fetchCurrentProfile();
-    setRole(profile?.role ?? 'CUSTOMER');
+    setRole(profile.role);
     setReady(true);
   }, []);
 

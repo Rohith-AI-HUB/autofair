@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { User } from 'lucide-react';
 import { getBrowserClient, getSessionFromAnyStore } from '@/lib/supabase/client';
 import { openAuthModal } from '@/lib/auth/modal';
+import { useAuth } from '@/lib/auth/useAuth';
 
 export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
@@ -14,6 +15,8 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { role } = useAuth();
+  const isInternalUser = role === 'ADMIN' || role === 'STAFF';
 
   useEffect(() => {
     let mounted = true;
@@ -112,28 +115,32 @@ export function AuthButton({ onNavigate }: { onNavigate?: () => void }) {
                 {email}
               </span>
             </p>
-            <Link
-              href="/sell-your-car"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onNavigate?.();
-              }}
-              className="block px-4 py-3 font-sans text-[13.5px] font-semibold text-navy hover:bg-off-white"
-            >
-              Sell Your Car
-            </Link>
-            <Link
-              href="/cars"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onNavigate?.();
-              }}
-              className="block px-4 py-3 font-sans text-[13.5px] font-semibold text-navy hover:bg-off-white"
-            >
-              Browse cars
-            </Link>
+            {!isInternalUser && (
+              <>
+                <Link
+                  href="/sell-your-car"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onNavigate?.();
+                  }}
+                  className="block px-4 py-3 font-sans text-[13.5px] font-semibold text-navy hover:bg-off-white"
+                >
+                  Sell Your Car
+                </Link>
+                <Link
+                  href="/cars"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onNavigate?.();
+                  }}
+                  className="block px-4 py-3 font-sans text-[13.5px] font-semibold text-navy hover:bg-off-white"
+                >
+                  Browse cars
+                </Link>
+              </>
+            )}
             <button
               type="button"
               role="menuitem"

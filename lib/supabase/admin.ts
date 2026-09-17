@@ -101,8 +101,8 @@ function throwSafe(status: number, body: unknown): never {
       ? String((body as { error: { message?: unknown } }).error?.message ?? '')
       : '';
   throw new DbOperationError('admin.api', new Error(`admin api ${status}`), {
-    status: status === 401 ? 401 : status === 403 ? 403 : status === 404 ? 404 : status === 409 ? 409 : status === 503 ? 503 : 422,
-    code: status === 401 ? 'UNAUTHORIZED' : status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 503 ? 'UNAVAILABLE' : 'VALIDATION',
+    status: status === 401 ? 401 : status === 403 ? 403 : status === 404 ? 404 : status === 409 ? 409 : status === 422 ? 422 : status === 503 ? 503 : 500,
+    code: status === 401 ? 'UNAUTHORIZED' : status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : status === 409 ? 'CONFLICT' : status === 422 ? 'VALIDATION' : status === 503 ? 'UNAVAILABLE' : 'INTERNAL',
     userMessage: msg && msg.length < 500 ? msg : SAFE_MESSAGES.INTERNAL,
   });
 }

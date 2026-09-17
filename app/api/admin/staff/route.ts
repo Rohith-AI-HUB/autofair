@@ -3,11 +3,61 @@ import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 import { getServiceClient } from '@/lib/supabase/service';
 
-const STAFF_ROLES = ['STAFF', 'staff', 'inspector'];
+const STAFF_ROLES = ['staff'];
 const ACTIVE = ['Pending', 'Assigned', 'In Progress'];
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function authCreateFailure(error: { message?: string | null; code?: string | null } | null): {
+  status: 409 | 422 | 429 | 503;
+  code: 'CONFLICT' | 'VALIDATION' | 'UNAVAILABLE';
+  message: string;
+} {
+  const message = String(error?.message ?? '').toLowerCase();
+  const code = String(error?.code ?? '').toLowerCase();
+  if (message.includes('already') || message.includes('exists') || message.includes('duplicate') || code.includes('duplicate')) {
+    return { status: 409, code: 'CONFLICT', message: 'An account with this email already exists.' };
+  }
+  if (message.includes('password') || code.includes('password') || code.includes('validation')) {
+    return {
+      status: 422,
+      code: 'VALIDATION',
+      message: 'The password does not meet the configured security requirements. Use a longer password with uppercase, lowercase, a number, and a symbol.',
+    };
+  }
+  if (message.includes('rate limit') || message.includes('too many') || code.includes('rate_limit')) {
+    return { status: 429, code: 'UNAVAILABLE', message: 'Too many account requests were made. Please wait a moment and try again.' };
+  }
+  return {
+    status: 503,
+    code: 'UNAVAILABLE',
+    message: 'Could not create the staff account. Please verify the Supabase Auth configuration and try again.',
+  };
+}
+
+function isDuplicateAuthUserError(error: { message?: string | null; code?: string | null } | null): boolean {
+  const message = String(error?.message ?? '').toLowerCase();
+  const code = String(error?.code ?? '').toLowerCase();
+  return message.includes('already') || message.includes('exists') || message.includes('duplicate') || code.includes('duplicate');
+}
+
+/** Finds an Auth user by email for orphan recovery only. The Auth Admin API
+ * has no get-by-email method, so scan bounded pages server-side. */
+async function findAuthUserByEmail(
+  svc: NonNullable<ReturnType<typeof getServiceClient>>,
+  email: string
+): Promise<{ id: string } | null> {
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await svc.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const users = data?.users ?? [];
+    const match = users.find((user) => user.email?.toLowerCase() === email);
+    if (match) return { id: match.id };
+    if (users.length < 1000) break;
+  }
+  return null;
 }
 
 /**
@@ -111,19 +161,58 @@ export async function POST(req: Request) {
       email_confirm: true,
       user_metadata: { full_name: fullName },
     });
-    if (cErr || !created?.user) {
-      const msg = (cErr?.message ?? '').toLowerCase();
-      if (msg.includes('already') || msg.includes('exists') || msg.includes('duplicate')) {
-        return NextResponse.json({ error: { message: 'An account with this email already exists.', code: 'CONFLICT' } }, { status: 409 });
+    let userId = created?.user?.id ?? null;
+    const createdNewAuthUser = Boolean(userId && !cErr);
+    if (cErr || !userId) {
+      // Earlier versions could create the Auth record and then fail while
+      // assigning its profile role. An admin retrying that exact email should
+      // recover the orphan, not be blocked by an invisible Auth-only account.
+      if (isDuplicateAuthUserError(cErr)) {
+        const orphan = await findAuthUserByEmail(svc, email);
+        if (orphan) {
+          const { data: existingProfile, error: lookupError } = await svc
+            .from('profiles')
+            .select('id')
+            .eq('id', orphan.id)
+            .maybeSingle();
+          if (lookupError) throw lookupError;
+          if (!existingProfile) {
+            const { error: updateError } = await svc.auth.admin.updateUserById(orphan.id, {
+              password,
+              email_confirm: true,
+              user_metadata: { full_name: fullName },
+            });
+            if (updateError) {
+              const safe = authCreateFailure(updateError);
+              return NextResponse.json({ error: { message: safe.message, code: safe.code } }, { status: safe.status });
+            }
+            userId = orphan.id;
+          }
+        }
       }
-      throw cErr ?? new Error('createUser returned no user');
+      if (userId) {
+        // Continue below and atomically complete the missing profile role.
+      } else {
+        logDbError('admin.staff.create.auth-user', cErr ?? new Error('createUser returned no user'));
+        const safe = authCreateFailure(cErr);
+        return NextResponse.json({ error: { message: safe.message, code: safe.code } }, { status: safe.status });
+      }
     }
 
-    const userId = created.user.id;
     const { error: pErr } = await svc
       .from('profiles')
-      .upsert({ id: userId, full_name: fullName, email, role: 'STAFF', is_active: true }, { onConflict: 'id' });
-    if (pErr) throw pErr;
+      .upsert({ id: userId, full_name: fullName, email, role: 'staff', is_active: true }, { onConflict: 'id' });
+    if (pErr) {
+      // Do not leave an account that can authenticate but has no valid staff
+      // profile. The service credential is the only actor allowed to perform
+      // this compensating cleanup.
+      if (createdNewAuthUser) await svc.auth.admin.deleteUser(userId).catch(() => undefined);
+      logDbError('admin.staff.create.profile', pErr, { stage: 'profile-upsert' });
+      return NextResponse.json(
+        { error: { message: 'Could not finish setting up the staff account. Please try again.', code: 'UNAVAILABLE' } },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json({ data: { id: userId, fullName, email, isActive: true } }, { status: 201 });
   } catch (err) {

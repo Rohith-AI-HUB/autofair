@@ -15,13 +15,18 @@ export type AppRole = 'ADMIN' | 'CUSTOMER' | 'STAFF';
 
 export type DbRoleString = string | null | undefined;
 
-export function mapDbRoleToAppRole(dbRole: DbRoleString): AppRole {
+/**
+ * Convert only a role actually stored by the backend into an application role.
+ * `null` deliberately means an invalid session; it is never a customer
+ * fallback.  Treating an unreadable/missing profile as a customer hid broken
+ * provisioning and made different parts of the app disagree about a user.
+ */
+export function mapDbRoleToAppRole(dbRole: DbRoleString): AppRole | null {
   const v = String(dbRole ?? '').trim().toLowerCase();
   if (v === 'admin') return 'ADMIN';
-  if (v === 'staff' || v === 'inspector') return 'STAFF';
-  // buyer, seller, customer, '' and anything unknown default to CUSTOMER.
-  // Unknown defaults to least-privileged role (never admin/staff).
-  return 'CUSTOMER';
+  if (v === 'staff') return 'STAFF';
+  if (v === 'customer') return 'CUSTOMER';
+  return null;
 }
 
 export function isStaffAppRole(role: AppRole | null | undefined): boolean {
@@ -54,11 +59,10 @@ export function getRoleHome(role: AppRole | null | undefined): '/' | '/admin' | 
 
 export function isPathAllowedForRole(path: string, role: AppRole | null | undefined): boolean {
   const p = path.split('?')[0].split('#')[0];
-  if (p === '/admin' || p.startsWith('/admin/')) return role === 'ADMIN';
-  if (p === '/staff' || p.startsWith('/staff/')) return role === 'STAFF';
-  if (p.startsWith('/api/admin')) return role === 'ADMIN';
-  if (p.startsWith('/api/staff')) return role === 'STAFF';
-  return true;
+  if (!role) return false;
+  if (role === 'ADMIN') return p === '/admin' || p.startsWith('/admin/');
+  if (role === 'STAFF') return p === '/staff' || p.startsWith('/staff/');
+  return !(p === '/admin' || p.startsWith('/admin/') || p === '/staff' || p.startsWith('/staff/'));
 }
 
 export function resolvePostLoginDestination(role: AppRole | null | undefined, next?: string | null): string {
@@ -93,15 +97,22 @@ export async function fetchCurrentProfile(): Promise<CurrentProfile | null> {
     const { data, error } = await sb.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
     if (error) {
       logDbError('profiles.fetchRole', error);
-      // Fall back to CUSTOMER so buyer flow never blocks on a role read
-      // failure; staff-only surfaces re-check server-side.
-      return { id: user.id, role: 'CUSTOMER', dbRole: null, email: user.email ?? null };
+      return null;
+    }
+    if (!data) {
+      // No profile is an invalid application session (for example, an old
+      // browser session created before profile provisioning). It is not a
+      // database error, so do not feed `null` to the error logger and create
+      // a misleading 500 console event.
+      return null;
     }
     const row = data as { id: string; role: string | null } | null;
     const dbRole = row?.role ?? null;
+    const role = mapDbRoleToAppRole(dbRole);
+    if (!role) return null;
     return {
       id: user.id,
-      role: mapDbRoleToAppRole(dbRole),
+      role,
       dbRole,
       email: user.email ?? null,
     };

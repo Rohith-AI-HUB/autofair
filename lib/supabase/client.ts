@@ -48,7 +48,10 @@ export function getBrowserClient(persist: PersistChoice = 'local'): SupabaseClie
       storageKey: STORAGE_KEYS[persist],
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: persist === 'local',
+      // `/auth/callback` explicitly exchanges the PKCE code. Letting a newly
+      // constructed browser client also inspect the URL races that exchange
+      // and consumes the verifier before the callback can use it.
+      detectSessionInUrl: false,
       flowType: 'pkce',
     },
   });

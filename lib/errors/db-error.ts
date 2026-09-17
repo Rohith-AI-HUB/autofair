@@ -408,7 +408,15 @@ export class DbOperationError extends Error {
     this.code = code;
     this.userMessage = userMessage;
     this.operation = operation;
-    this.requestId = logDbError(operation, raw, overrides?.context, overrides?.requestId);
+    // Callers use this error class on both server and browser. Browser-side
+    // API failures are already rendered as safe UI feedback; logging them via
+    // console.error creates a misleading Next.js error overlay and leaks
+    // implementation details into the user console. Keep structured logging
+    // on the server, where the original error belongs.
+    this.requestId =
+      typeof window === 'undefined'
+        ? logDbError(operation, raw, overrides?.context, overrides?.requestId)
+        : overrides?.requestId ?? generateRequestId();
     if (raw instanceof Error && raw.stack) {
       try {
         (this as unknown as { cause: unknown }).cause = raw;
