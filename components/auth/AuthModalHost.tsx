@@ -54,17 +54,15 @@ function HostInner() {
   const handleSuccess = useCallback(
     (dest: string) => {
       setOpen(false);
-      const target = next ?? null;
       setNext(undefined);
-      router.refresh();
-      // Preserve context by default; only navigate when an explicit `next`
-      // was requested and differs from the current route.
-      if (target && target !== pathname) router.replace(target);
-      else if (!next && dest && (pathname === '/auth' || pathname.startsWith('/auth/'))) {
-        router.replace(dest);
-      }
+      // `dest` is calculated by AuthForm from the backend profile and any
+      // allowed `next` path.  Navigating to the raw modal `next` value here
+      // discarded the role home for ordinary modal sign-ins, so admins and
+      // staff remained on the public page after a successful login.
+      if (dest && dest !== pathname) router.replace(dest);
+      else router.refresh();
     },
-    [next, pathname, router]
+    [pathname, router]
   );
 
   return <AuthModal open={open} initialMode={mode} next={next} onClose={close} onSuccess={handleSuccess} />;

@@ -24,8 +24,13 @@ export type DbRoleString = string | null | undefined;
 export function mapDbRoleToAppRole(dbRole: DbRoleString): AppRole | null {
   const v = String(dbRole ?? '').trim().toLowerCase();
   if (v === 'admin') return 'ADMIN';
-  if (v === 'staff') return 'STAFF';
-  if (v === 'customer') return 'CUSTOMER';
+  // Keep existing accounts usable while a deployment is moving from the
+  // original buyer/seller/inspector names to the canonical RBAC roles.
+  // The database migrations perform this normalization too, but login must
+  // not present a valid pre-migration account as signed out if that migration
+  // has not reached the connected Supabase project yet.
+  if (v === 'staff' || v === 'inspector') return 'STAFF';
+  if (v === 'customer' || v === 'buyer' || v === 'seller') return 'CUSTOMER';
   return null;
 }
 
