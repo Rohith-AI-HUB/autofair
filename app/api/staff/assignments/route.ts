@@ -14,7 +14,9 @@ export async function GET(req: Request) {
 
     // Parameterized filters only — never interpolate IDs into `.or()` strings.
     // (PostgREST `.or()` takes raw filter text, so a crafted ID could break out.)
-    const [mine, claimable] = await Promise.all([
+    // Returns active work (mine + claimable unassigned) plus my recent
+    // completed verifications for the Pending / Completed tabs.
+    const [mine, claimable, done] = await Promise.all([
       ctx.sb
         .from('vehicles')
         .select('*')
@@ -29,11 +31,19 @@ export async function GET(req: Request) {
         .in('status', ['submitted', 'in_review', 'draft'])
         .order('created_at', { ascending: false })
         .limit(25),
+      ctx.sb
+        .from('vehicles')
+        .select('*')
+        .eq('assigned_staff_id', ctx.userId)
+        .in('status', ['verified', 'published', 'sold'])
+        .order('updated_at', { ascending: false })
+        .limit(20),
     ]);
     if (mine.error) throw mine.error;
     if (claimable.error) throw claimable.error;
+    if (done.error) throw done.error;
     const seen = new Set<string>();
-    const vehicles = [...(mine.data ?? []), ...(claimable.data ?? [])].filter((v) => {
+    const vehicles = [...(mine.data ?? []), ...(claimable.data ?? []), ...(done.data ?? [])].filter((v) => {
       const id = (v as { id?: string }).id;
       if (!id || seen.has(id)) return false;
       seen.add(id);

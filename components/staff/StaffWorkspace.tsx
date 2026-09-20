@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Container } from '@/components/shared/Container';
 import { getSafeErrorMessage } from '@/lib/errors/db-error';
 import {
@@ -68,18 +68,43 @@ export function StaffWorkspace() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'pending' | 'completed'>('pending');
 
   useEffect(() => {
     fetchStaffAssignments()
       .then((r) => {
         setRows(r);
-        if (r.length && !selectedId) setSelectedId(r[0].vehicle.id);
+        const firstPending = r.find(
+          (x) => !['verified', 'published', 'sold'].includes(x.vehicle.status) && x.vehicle.inspection_status !== 'Completed'
+        );
+        if (!selectedId) setSelectedId((firstPending ?? r[0])?.vehicle.id ?? null);
       })
       .catch((err: unknown) => setLoadError(getSafeErrorMessage(err)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const pending = useMemo(
+    () =>
+      (rows ?? []).filter(
+        (r) => !['verified', 'published', 'sold'].includes(r.vehicle.status) && r.vehicle.inspection_status !== 'Completed'
+      ),
+    [rows]
+  );
+  const completed = useMemo(
+    () =>
+      (rows ?? []).filter(
+        (r) => ['verified', 'published', 'sold'].includes(r.vehicle.status) || r.vehicle.inspection_status === 'Completed'
+      ),
+    [rows]
+  );
+  const visible = tab === 'pending' ? pending : completed;
+
   const selected = rows?.find((r) => r.vehicle.id === selectedId) ?? null;
+  const selectedIsCompleted = Boolean(
+    selected &&
+      (['verified', 'published', 'sold'].includes(selected.vehicle.status) ||
+        selected.vehicle.inspection_status === 'Completed')
+  );
 
   function setItemResult(secId: string, itemName: string, result: 'pass' | 'attention' | 'fail') {
     setSections((ss) =>
@@ -152,7 +177,15 @@ export function StaffWorkspace() {
         })),
       });
       setDone(`Verified. ${selected.vehicle.year} ${selected.vehicle.make} ${selected.vehicle.model} is now LIVE in /cars with its real Trust Report.`);
-      setRows((rs) => (rs ?? []).filter((r) => r.vehicle.id !== selected.vehicle.id));
+      // Move the file to Completed instead of dropping it, so the
+      // Completed tab shows history without a refetch.
+      setRows((rs) =>
+        (rs ?? []).map((r) =>
+          r.vehicle.id === selected.vehicle.id
+            ? { ...r, vehicle: { ...r.vehicle, status: 'verified' as const, inspection_status: 'Completed' as const } }
+            : r
+        )
+      );
       setSelectedId(null);
       setFiles([]);
       setSections(freshSections());
@@ -182,15 +215,48 @@ export function StaffWorkspace() {
 
       {!rows ? (
         <p className="mt-6 font-mono text-[11px] text-muted" role="status">LOADING ASSIGNMENTS…</p>
-      ) : rows.length === 0 ? (
-        <div className="mt-6 border border-line bg-white p-8">
-          <p className="font-mono text-[11px] text-teal-dark">NO ASSIGNMENTS</p>
-          <p className="mt-2 font-sans text-[16px] font-bold text-navy">Nothing assigned right now.</p>
-        </div>
       ) : (
-        <div className="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <>
+          <div role="group" aria-label="Filter by verification status" className="mt-6 flex flex-wrap gap-0 bg-[#EFEAE3] p-1">
+            {(
+              [
+                { key: 'pending', label: `Pending · ${pending.length}` },
+                { key: 'completed', label: `Completed · ${completed.length}` },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                aria-pressed={tab === t.key}
+                onClick={() => setTab(t.key)}
+                className={
+                  tab === t.key
+                    ? 'bg-navy px-4 py-[10px] font-sans text-[13px] font-bold text-white'
+                    : 'px-4 py-[10px] font-sans text-[13px] font-semibold text-navy hover:underline'
+                }
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {visible.length === 0 ? (
+            <div className="mt-4 border border-line bg-white p-8">
+              <p className="font-mono text-[11px] text-teal-dark">
+                {tab === 'pending' ? 'NO PENDING WORK' : 'NOTHING COMPLETED YET'}
+              </p>
+              <p className="mt-2 font-sans text-[16px] font-bold text-navy">
+                {tab === 'pending' ? 'Nothing assigned right now.' : 'Verified files will appear here.'}
+              </p>
+            </div>
+          ) : (
+        <div className="mt-4 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="flex flex-col gap-3">
-            {rows.map((r) => (
+            {visible.map((r) => {
+              const isDone =
+                ['verified', 'published', 'sold'].includes(r.vehicle.status) ||
+                r.vehicle.inspection_status === 'Completed';
+              return (
               <button
                 key={r.vehicle.id}
                 type="button"
@@ -213,13 +279,41 @@ export function StaffWorkspace() {
                   {r.vehicle.reg_number} • {r.vehicle.location} • {r.vehicle.inspection_id}
                 </p>
                 <p className="mt-1 font-mono text-[10px] text-teal-dark">
-                  {r.vehicle.assigned_staff_id ? 'STATUS: ASSIGNED' : 'STATUS: UNASSIGNED — VERIFY TO CLAIM'}
+                  {isDone
+                    ? 'STATUS: VERIFIED ✓'
+                    : r.vehicle.assigned_staff_id
+                      ? 'STATUS: ASSIGNED'
+                      : 'STATUS: UNASSIGNED — VERIFY TO CLAIM'}
                 </p>
               </button>
-            ))}
+              );
+            })}
           </div>
 
-          {selected && (
+          {selected && selectedIsCompleted ? (
+            <div className="h-fit border border-teal-line bg-teal-bg p-6">
+              <p className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">VERIFIED ✓</p>
+              <h2 className="mt-1 font-sans text-[20px] font-extrabold text-navy">
+                {selected.vehicle.year} {selected.vehicle.make} {selected.vehicle.model}
+              </h2>
+              <p className="mt-1 font-sans text-[13px] text-muted">
+                {selected.vehicle.location} • {selected.vehicle.km_driven} km • {selected.vehicle.fuel} •{' '}
+                {selected.vehicle.transmission} • Reg {selected.vehicle.reg_number}
+              </p>
+              <p className="mt-3 font-mono text-[11px] text-teal-dark">{selected.vehicle.inspection_id}</p>
+              {selected.listing?.slug ? (
+                <a
+                  href={`/cars/${selected.listing.slug}`}
+                  className="mt-4 inline-block bg-navy px-5 py-3 font-sans text-[13px] font-bold text-white hover:bg-navy-2"
+                >
+                  Open live dossier →
+                </a>
+              ) : (
+                <p className="mt-4 font-sans text-[13px] text-muted">This file is verified and live in /cars.</p>
+              )}
+            </div>
+          ) : (
+          selected && !selectedIsCompleted && (
             <div className="border border-line bg-white p-6">
               <p className="font-mono text-[10px] tracking-[0.06em] text-muted">ONSITE VISIT</p>
               <h2 className="mt-1 font-sans text-[20px] font-extrabold text-navy">
@@ -442,8 +536,10 @@ export function StaffWorkspace() {
                 Backend sets status VERIFIED + publishes LIVE. Customers cannot self-verify.
               </p>
             </div>
-          )}
+          ))}
         </div>
+          )}
+        </>
       )}
     </Container>
   );

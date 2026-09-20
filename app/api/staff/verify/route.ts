@@ -256,9 +256,10 @@ export async function POST(req: Request) {
     }
 
     //flip to verified (trigger stamps verified_at; blocks non-staff).
+    // inspection_status Completed drops it from admin active load/upcoming.
     const { error: vvErr } = await ctx.sb
       .from('vehicles')
-      .update({ status: 'verified' })
+      .update({ status: 'verified', inspection_status: 'Completed' })
       .eq('id', vehicleId);
     if (vvErr) throw vvErr;
 
