@@ -211,5 +211,6 @@ export function formatKm(n: number): string {
 }
 
 export function carTitle(car: Pick<Car, 'year' | 'make' | 'model' | 'variant'>): string {
-  return `${car.year} ${car.make} ${car.model} ${car.variant}`;
+  const v = car.variant && car.variant.trim() && car.variant.trim() !== '—' ? ` ${car.variant.trim()}` : '';
+  return `${car.year} ${car.make} ${car.model}${v}`;
 }

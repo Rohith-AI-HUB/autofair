@@ -88,6 +88,7 @@ export function AdminDashboard() {
   const [addName, setAddName] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addPw, setAddPw] = useState('');
+  const [showAddPw, setShowAddPw] = useState(false);
   const [addErr, setAddErr] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<AdminStaff | null>(null);
@@ -98,6 +99,7 @@ export function AdminDashboard() {
   const [deleting, setDeleting] = useState<AdminStaff | null>(null);
   const [resettingPassword, setResettingPassword] = useState<AdminStaff | null>(null);
   const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [showResetPw, setShowResetPw] = useState(false);
   const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
 
   const [showNewInsp, setShowNewInsp] = useState(false);
@@ -771,7 +773,18 @@ export function AdminDashboard() {
             </label>
             <label className="block">
               <span className="font-mono text-[10px] text-muted">PASSWORD (12+ CHARS) *</span>
-              <input value={addPw} onChange={(e) => setAddPw(e.target.value)} type="password" autoComplete="new-password" minLength={12} placeholder="Mixed case, number, symbol" className={`${inputCls} mt-1.5`} />
+              <span className="relative mt-1.5 block">
+                <input value={addPw} onChange={(e) => setAddPw(e.target.value)} type={showAddPw ? 'text' : 'password'} autoComplete="new-password" minLength={8} placeholder="Mixed case, number, symbol" className={`${inputCls} w-full pr-16`} />
+                <button
+                  type="button"
+                  onClick={() => setShowAddPw((v) => !v)}
+                  aria-label={showAddPw ? 'Hide password' : 'Show password'}
+                  aria-pressed={showAddPw}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 font-mono text-[10px] font-bold tracking-[0.06em] text-teal-dark hover:underline"
+                >
+                  {showAddPw ? 'HIDE' : 'SHOW'}
+                </button>
+              </span>
             </label>
             {addErr && <p role="alert" className="border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">{addErr}</p>}
             <div className="flex gap-3">
@@ -830,7 +843,18 @@ export function AdminDashboard() {
         <Modal title={`Set password for ${resettingPassword.fullName}`} sub="For internal staff accounts without a deliverable email inbox." onClose={() => setResettingPassword(null)}>
           <label className="block">
             <span className="font-mono text-[10px] text-muted">NEW PASSWORD *</span>
-            <input type="password" value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} minLength={12} className={`${inputCls} mt-1.5`} />
+            <span className="relative mt-1.5 block">
+              <input type={showResetPw ? 'text' : 'password'} value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} minLength={8} className={`${inputCls} w-full pr-16`} />
+              <button
+                type="button"
+                onClick={() => setShowResetPw((v) => !v)}
+                aria-label={showResetPw ? 'Hide password' : 'Show password'}
+                aria-pressed={showResetPw}
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 font-mono text-[10px] font-bold tracking-[0.06em] text-teal-dark hover:underline"
+              >
+                {showResetPw ? 'HIDE' : 'SHOW'}
+              </button>
+            </span>
           </label>
           <p className="mt-2 font-sans text-[12px] text-muted">Use at least 12 characters with uppercase, lowercase, a number, and a symbol. Share it securely; it is stored only as a hash and cannot be viewed again.</p>
           {resetPasswordError && <p role="alert" className="mt-3 border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">{resetPasswordError}</p>}
