@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Car } from '@/types';
 import { InspectionBreakdown } from '@/components/inspection/InspectionBreakdown';
 import { verifiedInspection } from '@/lib/data/inspections';
+import { SellerContact } from '@/components/cars/SellerContact';
 
 function formatInspectedAt(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -94,12 +95,9 @@ export function TrustReport({ car }: { car: Car }) {
       </div>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link
-          href="/contact"
-          className="bg-teal px-6 py-3 text-center font-sans text-[14px] font-bold text-navy hover:bg-[#12a295]"
-        >
-          Contact seller — quote {car.inspectionId}
-        </Link>
+        <div className="flex-1">
+          <SellerContact vehicleId={car.id} inspectionId={car.inspectionId} variant="trust" />
+        </div>
         <Link
           href="/inspection"
           className="border border-white/20 px-6 py-3 text-center font-sans text-[14px] font-semibold text-white hover:border-white"

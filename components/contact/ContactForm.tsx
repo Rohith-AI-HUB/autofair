@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type Fields = { name: string; email: string; inspectionId: string; message: string };
 type Errors = Partial<Record<keyof Fields, string>>;
@@ -9,6 +9,19 @@ export function ContactForm() {
   const [fields, setFields] = useState<Fields>({ name: '', email: '', inspectionId: '', message: '' });
   const [errors, setErrors] = useState<Errors>({});
   const [sent, setSent] = useState(false);
+
+  // Prefill from dossier fallback: /contact?inspectionId=AF-...
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const id = q.get('inspectionId') ?? '';
+      if (id && /^AF-\d{4}-\d{4,}$/i.test(id.trim())) {
+        setFields((f) => (f.inspectionId ? f : { ...f, inspectionId: id.trim().toUpperCase() }));
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
 
   function set<K extends keyof Fields>(k: K, v: string) {
     setFields((f) => ({ ...f, [k]: v }));

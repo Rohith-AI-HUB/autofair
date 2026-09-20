@@ -1,5 +1,6 @@
 import type { Car } from '@/types';
 import { carTitle, formatKm, formatPrice } from '@/lib/data/cars';
+import { SellerContact } from '@/components/cars/SellerContact';
 
 export function VehicleSummary({ car }: { car: Car }) {
   return (
@@ -44,6 +45,10 @@ export function VehicleSummary({ car }: { car: Car }) {
           <li>✓ Documents {car.verification.documents}</li>
           <li>✓ Accident history {car.verification.accidentHistory}</li>
         </ul>
+      </div>
+
+      <div className="mt-4">
+        <SellerContact vehicleId={car.id} inspectionId={car.inspectionId} variant="dossier" />
       </div>
     </div>
   );
