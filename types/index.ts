@@ -30,6 +30,13 @@ export interface Car {
   };
   verification: Verification;
   docsPending?: boolean;
+  /** Verified report: staff-entered breakdown. Absent/empty → UI shows verified fallback. */
+  sections?: InspectionCategory[];
+  isSample?: boolean;
+  inspectedAt?: string | null;
+  inspectorNote?: string;
+  accidentNote?: string;
+  docsNote?: string;
 }
 
 export interface InspectionItem {

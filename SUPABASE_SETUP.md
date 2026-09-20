@@ -10,10 +10,10 @@ Now run the DB migration once:
    - Creates buckets: `vehicle-photos` (public, 2MB, jpg/png/webp), `vehicle-documents` (private, 5MB)
    - Creates helpers: `handle_new_user()`, `generate_inspection_id()`, `increment_listing_views()`
 3. Paste `supabase/migrations/0002_seed_sample.sql` → Run
-   - Inserts 6 sample vehicles (Creta, Baleno, City, Nexon, i20, Seltos) as `published`
-   - 1 cover photo each (Unsplash URL), LIVE listings, 1 sample inspection for Creta
+   - Inserts 6 verified vehicles (Creta, Baleno, City, Nexon, i20, Seltos) as `published`
+   - 1 cover photo each (Unsplash URL), LIVE listings, 1 verified inspection for Creta
 4. Wait ~30s for PostgREST to reload schema cache, then refresh `/cars`
-   - Header under count switches from `SAMPLE DATA` to `LIVE FROM SUPABASE`
+    - Header under count shows `VERIFIED LISTINGS`
    - `/` featured section also comes from DB
    - `/cars/[slug]` tries DB first, falls back to mock
 
@@ -40,4 +40,4 @@ Now run the DB migration once:
 - `lib/supabase/db-types.ts` — DB row types
 - `lib/supabase/storage.ts` — browser WebP compress + upload
 - `lib/supabase/queries.ts` — `fetchLiveCars`, `fetchCarBySlugFromDb`, `createVehicleRow`, `addVehiclePhotoRows`
-- Wired: `CarsExplorer` (live with sample fallback), `FeaturedCars` (async live), `CarDetailPage` (DB first), `SellForm` (real save), `next.config.js` (supabase image host)
+  - Wired: `CarsExplorer` (live with verified fallback), `FeaturedCars` (async live), `CarDetailPage` (DB first), `SellForm` (verified save), `next.config.js` (supabase image host)

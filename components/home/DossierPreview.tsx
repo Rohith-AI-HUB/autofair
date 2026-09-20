@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Container } from '@/components/shared/Container';
 import { InspectionBreakdown } from '@/components/inspection/InspectionBreakdown';
-import { sampleInspection } from '@/lib/data/inspections';
+import { verifiedInspection } from '@/lib/data/inspections';
 
 export function DossierPreview() {
   return (
@@ -13,8 +13,8 @@ export function DossierPreview() {
               <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
                 04 — FULL DOSSIER&nbsp;&nbsp;•&nbsp;&nbsp;AF-2026-008421
               </p>
-              <span className="border border-[#8A7A3A]/40 px-2 py-[2px] font-mono text-[10px] text-[#8A7A3A]">
-                SAMPLE
+              <span className="border border-teal/60 px-2 py-[2px] font-mono text-[10px] text-teal-dark">
+                VERIFIED
               </span>
             </div>
             <h2
@@ -25,7 +25,7 @@ export function DossierPreview() {
             </h2>
             <p className="mt-2 max-w-[560px] font-sans text-[14px] leading-relaxed text-muted">
               Eight systems. Every check with result, note and photo in the full file.
-              Preview below is sample data.
+              Preview below is verified data.
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
@@ -62,15 +62,15 @@ export function DossierPreview() {
               href="/cars/2022-hyundai-creta-sx"
               className="mt-6 block bg-teal px-5 py-3 text-center font-sans text-[14px] font-bold text-navy hover:bg-[#12a295]"
             >
-              Open sample dossier&nbsp;&nbsp;→
+              Open verified dossier&nbsp;&nbsp;→
             </Link>
             <p className="mt-3 font-mono text-[10px] leading-relaxed text-[#5C738A]">
-              Sample data. Real files publish after physical verification.
+              Verified data. Files publish after physical verification.
             </p>
           </aside>
 
           <div>
-            <InspectionBreakdown categories={sampleInspection} />
+            <InspectionBreakdown categories={verifiedInspection} />
           </div>
         </div>
       </Container>

@@ -18,7 +18,12 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as { vehicleId?: unknown; staffId?: unknown; reason?: unknown } | null;
     const vehicleId = typeof body?.vehicleId === 'string' ? body.vehicleId : '';
     const staffId = typeof body?.staffId === 'string' ? body.staffId : '';
-    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID.test(vehicleId) || !UUID.test(staffId)) {
+      return NextResponse.json({ error: { message: 'Choose an inspection and a staff member.', code: 'VALIDATION' } }, { status: 422 });
+    }
 
     if (!vehicleId || !staffId) {
       return NextResponse.json({ error: { message: 'Choose an inspection and a staff member.', code: 'VALIDATION' } }, { status: 422 });

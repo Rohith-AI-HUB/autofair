@@ -31,8 +31,8 @@ export function PhotoBleed() {
               <p className="font-sans text-[12px] font-extrabold tracking-[0.06em] text-teal">
                 ● AUTOFAIR VERIFIED
               </p>
-              <p className="font-mono text-[10px] tracking-[0.08em] text-[#999]">
-                SAMPLE
+              <p className="font-mono text-[10px] tracking-[0.08em] text-teal-bright">
+                VERIFIED
               </p>
             </div>
             <ul className="mt-4 space-y-3">

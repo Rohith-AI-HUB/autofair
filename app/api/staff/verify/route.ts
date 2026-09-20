@@ -14,8 +14,12 @@ function slugify(s: string): string {
 
 /**
  * POST /api/staff/verify — complete verification. STAFF only (strict).
- * Body: { vehicleId, score 0-10, overallStatus, notes?, ratings?, price >= 0 }
+ * Body: { vehicleId, score 0-10, overallStatus, notes?, ratings?, price >= 0,
+ *   condition? {mechanical,exterior,interior,tyres}, accidentStatus?, accidentNote?,
+ *   docsStatus?, docsNote?, sections? [{title, items:[{name,result,note}]}] }
  * Backend owns the transition: vehicle -> verified, listing -> LIVE.
+ * Requires migration 0011 for the per-check breakdown; without it the
+ * inspection saves but the Trust Report uses the verified fallback.
  * Admins monitor via /api/admin/*; they do not verify through staff APIs.
  */
 export async function POST(req: Request) {
@@ -30,6 +34,12 @@ export async function POST(req: Request) {
       notes?: unknown;
       ratings?: unknown;
       price?: unknown;
+      condition?: unknown;
+      accidentStatus?: unknown;
+      accidentNote?: unknown;
+      docsStatus?: unknown;
+      docsNote?: unknown;
+      sections?: unknown;
     } | null;
     const vehicleId = typeof body?.vehicleId === 'string' ? body.vehicleId : '';
     const score = typeof body?.score === 'number' ? body.score : NaN;
@@ -40,8 +50,59 @@ export async function POST(req: Request) {
       body?.ratings && typeof body.ratings === 'object' && !Array.isArray(body.ratings)
         ? (body.ratings as Record<string, unknown>)
         : null;
+    const CONDITION_LABELS = new Set(['EXCELLENT', 'VERY GOOD', 'GOOD', 'AVERAGE', 'POOR']);
+    const cleanCondition: Record<string, string> | null = (() => {
+      if (!body?.condition || typeof body.condition !== 'object' || Array.isArray(body.condition)) return null;
+      const out: Record<string, string> = {};
+      for (const k of ['mechanical', 'exterior', 'interior', 'tyres']) {
+        const raw = (body.condition as Record<string, unknown>)[k];
+        if (typeof raw !== 'string' || !raw.trim()) continue;
+        const v = raw.trim().toUpperCase().slice(0, 24);
+        out[k] = CONDITION_LABELS.has(v) ? v : v;
+      }
+      return Object.keys(out).length ? out : null;
+    })();
+    const ACCIDENTS = new Set(['CLEAR', 'MINOR REPAIR', 'MAJOR ACCIDENT']);
+    const accidentStatusRaw = typeof body?.accidentStatus === 'string' ? body.accidentStatus.trim().toUpperCase().slice(0, 32) : 'CLEAR';
+    const accidentStatus = ACCIDENTS.has(accidentStatusRaw) ? accidentStatusRaw : 'CLEAR';
+    const accidentNote = typeof body?.accidentNote === 'string' ? body.accidentNote.slice(0, 500) : '';
+    const docsStatus = typeof body?.docsStatus === 'string' && body.docsStatus.trim()
+      ? body.docsStatus.trim().toUpperCase().slice(0, 32)
+      : '1 PENDING';
+    const docsNote = typeof body?.docsNote === 'string' ? body.docsNote.slice(0, 500) : '';
+    // Breakdown sections: [{title, items:[{name,result,note}]}]. Capped so one
+    // request cannot flood the table. Names/titles trimmed, notes sliced.
+    const cleanSections: { title: string; items: { name: string; result: string; note: string }[] }[] = (() => {
+      if (!Array.isArray(body?.sections)) return [];
+      return (body.sections as unknown[])
+        .slice(0, 12)
+        .map((s) => {
+          if (!s || typeof s !== 'object') return null;
+          const title = typeof (s as { title?: unknown }).title === 'string'
+            ? String((s as { title: string }).title).trim().slice(0, 80)
+            : '';
+          const rawItems = Array.isArray((s as { items?: unknown }).items) ? ((s as { items: unknown[] }).items as unknown[]) : [];
+          const items = rawItems.slice(0, 20).map((it) => {
+            if (!it || typeof it !== 'object') return null;
+            const name = typeof (it as { name?: unknown }).name === 'string'
+              ? String((it as { name: string }).name).trim().slice(0, 120)
+              : '';
+            const result = typeof (it as { result?: unknown }).result === 'string'
+              ? String((it as { result: string }).result).toLowerCase()
+              : '';
+            const note = typeof (it as { note?: unknown }).note === 'string'
+              ? String((it as { note: string }).note).slice(0, 300)
+              : '';
+            if (!name || !OVERALL.has(result)) return null;
+            return { name, result, note };
+          }).filter((x): x is { name: string; result: string; note: string } => x !== null);
+          if (!title || !items.length) return null;
+          return { title, items };
+        })
+        .filter((x): x is { title: string; items: { name: string; result: string; note: string }[] } => x !== null);
+    })();
 
-    if (!vehicleId) {
+    if (!vehicleId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(vehicleId)) {
       return NextResponse.json(
         { error: { message: 'Some values look invalid. Please check your input and try again.', code: 'VALIDATION' } },
         { status: 422 }
@@ -125,6 +186,12 @@ export async function POST(req: Request) {
           overall_status: overallStatus,
           notes,
           ratings: cleanRatings,
+          condition: cleanCondition,
+          accident_status: accidentStatus,
+          accident_note: accidentNote,
+          docs_status: docsStatus,
+          docs_note: docsNote,
+          is_sample: false,
           inspected_at: new Date().toISOString(),
         })
         .eq('vehicle_id', vehicleId);
@@ -137,9 +204,55 @@ export async function POST(req: Request) {
         overall_status: overallStatus,
         notes,
         ratings: cleanRatings,
+        condition: cleanCondition,
+        accident_status: accidentStatus,
+        accident_note: accidentNote,
+        docs_status: docsStatus,
+        docs_note: docsNote,
+        is_sample: false,
         inspected_at: new Date().toISOString(),
       });
       if (iErr) throw iErr;
+    }
+
+    // Per-check breakdown (requires migration 0011 RLS). Replace the whole
+    // breakdown so re-verification never duplicates rows. Best-effort when
+    // sections are provided; without them the report keeps prior data.
+    if (cleanSections.length) {
+      const { data: inspRow } = await ctx.sb
+        .from('inspections')
+        .select('id')
+        .eq('vehicle_id', vehicleId)
+        .maybeSingle();
+      const inspectionId = (inspRow as { id: string } | null)?.id;
+      if (!inspectionId) throw new Error('inspection row missing after upsert');
+      const { error: delErr } = await ctx.sb
+        .from('inspection_sections')
+        .delete()
+        .eq('inspection_id', inspectionId);
+      if (delErr) throw delErr;
+      const now = new Date().toISOString();
+      for (const sec of cleanSections) {
+        const passed = sec.items.filter((i) => i.result === 'pass').length;
+        const { data: secRow, error: sErr } = await ctx.sb
+          .from('inspection_sections')
+          .insert({ inspection_id: inspectionId, title: sec.title, passed, total: sec.items.length })
+          .select('id')
+          .single();
+        if (sErr) throw sErr;
+        const sectionId = (secRow as { id: string }).id;
+        const { error: itErr } = await ctx.sb.from('inspection_items').insert(
+          sec.items.map((it) => ({
+            section_id: sectionId,
+            name: it.name,
+            result: it.result,
+            note: it.note,
+            inspected_at: now,
+            inspector_id: ctx.userId,
+          }))
+        );
+        if (itErr) throw itErr;
+      }
     }
 
     //flip to verified (trigger stamps verified_at; blocks non-staff).

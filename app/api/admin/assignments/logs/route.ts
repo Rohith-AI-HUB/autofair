@@ -26,8 +26,23 @@ export async function GET(req: Request) {
       assignment_type: string; reason: string; created_by: string | null; created_at: string;
     }>);
 
-    const vehicleIds = [...new Set(rows.map((r) => r.vehicle_id))];
-    const staffIds = [...new Set([...rows.map((r) => r.previous_staff_id), ...rows.map((r) => r.new_staff_id)].filter(Boolean))] as string[];
+    // Collapse creation double-fire: trigger + app fallback can log the same
+    // Unassigned → Unassigned no-op twice within minutes. Show newest only.
+    // Rows are newest-first, so keep the first per vehicle+type, drop older
+    // ones within 10 minutes of it.
+    const keptAt = new Map<string, number>();
+    const deduped = rows.filter((r) => {
+      if (r.previous_staff_id || r.new_staff_id) return true;
+      const key = `${r.vehicle_id}|${r.assignment_type}`;
+      const t = new Date(r.created_at).getTime();
+      const prev = keptAt.get(key);
+      if (prev !== undefined && Math.abs(prev - t) < 10 * 60 * 1000) return false;
+      keptAt.set(key, t);
+      return true;
+    });
+
+    const vehicleIds = [...new Set(deduped.map((r) => r.vehicle_id))];
+    const staffIds = [...new Set([...deduped.map((r) => r.previous_staff_id), ...deduped.map((r) => r.new_staff_id)].filter(Boolean))] as string[];
 
     const [{ data: vehicles }, { data: staff }] = await Promise.all([
       vehicleIds.length
@@ -47,7 +62,7 @@ export async function GET(req: Request) {
       sMap.set(s.id, { name: s.full_name ?? 'Unnamed staff', email: s.email ?? null });
     }
 
-    const out = rows.map((r) => ({
+    const out = deduped.map((r) => ({
       id: r.id,
       vehicleId: r.vehicle_id,
       inspectionCode: vMap.get(r.vehicle_id)?.code ?? r.vehicle_id.slice(0, 8),

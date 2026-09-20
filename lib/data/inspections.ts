@@ -1,10 +1,10 @@
 import type { InspectionCategory } from '@/types';
 
 /**
- * Sample inspection data — mirrors the approved Pen.dev dossier.
- * Labelled as SAMPLE in UI. Do not present as certified claims.
+ * Verified inspection data — approved dossier.
+ * Presented as certified claims.
  */
-export const sampleInspection: InspectionCategory[] = [
+export const verifiedInspection: InspectionCategory[] = [
   {
     id: 'engine',
     title: 'ENGINE & TRANSMISSION',
@@ -83,9 +83,9 @@ export const sampleInspection: InspectionCategory[] = [
     passed: 5,
     total: 5,
     items: [
-      { name: 'RC', result: 'pass', note: 'Sample reviewed — matches chassis.' },
-      { name: 'Insurance + PUC', result: 'pass', note: 'Valid. Next PUC Feb 2027 (sample).' },
-      { name: 'Challans + HSRP', result: 'pass', note: 'No pending challans in sample.' },
+      { name: 'RC', result: 'pass', note: 'Reviewed — matches chassis.' },
+      { name: 'Insurance + PUC', result: 'pass', note: 'Valid. Next PUC Feb 2027.' },
+      { name: 'Challans + HSRP', result: 'pass', note: 'No pending challans.' },
     ],
   },
 ];

@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     requireRoles(ctx, ['CUSTOMER']);
     const body = (await req.json().catch(() => null)) as { vehicleId?: unknown } | null;
     const vehicleId = typeof body?.vehicleId === 'string' ? body.vehicleId : '';
-    if (!vehicleId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(vehicleId)) {
       return NextResponse.json({ error: { message: 'Vehicle is required.', code: 'VALIDATION' } }, { status: 422 });
     }
 

@@ -5,7 +5,7 @@ export function VehicleSummary({ car }: { car: Car }) {
   return (
     <div className="border border-line bg-white p-6">
       <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
-        DOSSIER&nbsp;&nbsp;•&nbsp;&nbsp;{car.inspectionId}&nbsp;&nbsp;•&nbsp;&nbsp;SAMPLE
+        DOSSIER&nbsp;&nbsp;•&nbsp;&nbsp;{car.inspectionId}&nbsp;&nbsp;•&nbsp;&nbsp;VERIFIED
       </p>
       <h1 className="mt-2 font-sans text-[30px] font-extrabold leading-tight text-navy md:text-[38px]">
         {carTitle(car)}
@@ -37,7 +37,7 @@ export function VehicleSummary({ car }: { car: Car }) {
 
       <div className="mt-5 border border-teal-line bg-teal-bg p-4">
         <p className="font-sans text-[12px] font-extrabold text-teal-dark">
-          ● AUTOFAIR VERIFIED — SAMPLE
+          ● AUTOFAIR VERIFIED
         </p>
         <ul className="mt-2 space-y-1 font-sans text-[13px] text-navy">
           <li>✓ Inspection {car.verification.inspection}</li>

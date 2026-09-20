@@ -77,6 +77,11 @@ export interface DbInspection {
   is_sample: boolean;
   notes: string;
   ratings: Record<string, number | null> | null;
+  condition: Record<string, string> | null;
+  accident_status: string | null;
+  accident_note: string | null;
+  docs_status: string | null;
+  docs_note: string | null;
 }
 
 export interface DbInspectionSection {
@@ -93,6 +98,9 @@ export interface DbInspectionItem {
   name: string;
   result: 'pass' | 'attention' | 'fail';
   note: string;
+  photo_url: string | null;
+  inspected_at: string | null;
+  inspector_id: string | null;
 }
 
 export interface DbAssignmentLog {

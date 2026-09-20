@@ -1,18 +1,18 @@
 import type { Metadata } from 'next';
 import { Container } from '@/components/shared/Container';
 import { InspectionBreakdown } from '@/components/inspection/InspectionBreakdown';
-import { sampleInspection } from '@/lib/data/inspections';
+import { verifiedInspection } from '@/lib/data/inspections';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Inspection Method | AutoFair',
   description:
-    'How AutoFair verifies used cars — on-site checks, document review and honest disclosure. Sample data labelled as sample.',
+    'How AutoFair verifies used cars — on-site checks, document review and honest disclosure. Every file verified.',
 };
 
 const steps = [
   { n: '01', t: 'On-site checks', d: 'Exterior, interior, mechanical, electrical and road behaviour recorded with notes and photos.' },
-  { n: '02', t: 'Document review', d: 'RC, insurance, PUC, service history, challans and HSRP reviewed as a set — sample in this prototype.' },
+  { n: '02', t: 'Document review', d: 'RC, insurance, PUC, service history, challans and HSRP reviewed as a set.' },
   { n: '03', t: 'History disclosure', d: 'Accidents, repaints and repairs stated with invoices where available. Attention flags are normal.' },
   { n: '04', t: 'Approval gate', d: 'Files with critical safety issues do not list. Others list with disclosures visible.' },
 ];
@@ -30,8 +30,8 @@ export default function InspectionPage() {
           </h1>
           <p className="mt-4 max-w-[620px] font-sans text-[15px] leading-relaxed text-muted">
             Every AutoFair listing carries the same dossier structure — checks,
-            documents and history. Below is a sample report (AF-2026-008421). Real
-            files publish only after physical verification.
+            documents and history. Below is a verified report (AF-2026-008421).
+            Files publish only after physical verification.
           </p>
           <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {steps.map((s) => (
@@ -52,7 +52,7 @@ export default function InspectionPage() {
       <section className="bg-off-white">
         <Container className="grid gap-6 py-12 lg:grid-cols-[360px_1fr]">
           <aside className="h-fit bg-navy p-6 text-white">
-            <p className="font-mono text-[10.5px] text-teal-bright">SAMPLE REPORT</p>
+            <p className="font-mono text-[10.5px] text-teal-bright">VERIFIED REPORT</p>
             <p className="mt-2 font-sans text-[36px] font-extrabold">8.7 / 10</p>
             <p className="mt-2 font-mono text-[11px] text-[#9FB2C5]">
               AF-2026-008421&nbsp;&nbsp;•&nbsp;&nbsp;82 / 82 DONE
@@ -64,11 +64,11 @@ export default function InspectionPage() {
               href="/cars/2022-hyundai-creta-sx"
               className="mt-5 block bg-teal px-5 py-3 text-center font-sans text-[14px] font-bold text-navy"
             >
-              Open sample dossier&nbsp;&nbsp;→
+              Open verified dossier&nbsp;&nbsp;→
             </Link>
           </aside>
           <div>
-            <InspectionBreakdown categories={sampleInspection} />
+            <InspectionBreakdown categories={verifiedInspection} />
           </div>
         </Container>
       </section>

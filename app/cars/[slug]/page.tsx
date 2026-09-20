@@ -6,6 +6,7 @@ import { VehicleGallery } from '@/components/cars/VehicleGallery';
 import { VehicleSummary } from '@/components/cars/VehicleSummary';
 import { TrustReport } from '@/components/cars/TrustReport';
 import { CarCard } from '@/components/cars/CarCard';
+import { ViewCounter } from '@/components/cars/ViewCounter';
 import { cars, getCarBySlug, carTitle } from '@/lib/data/cars';
 import { fetchCarBySlugFromDb, fetchLiveCars } from '@/lib/supabase/queries';
 
@@ -23,7 +24,7 @@ export async function generateMetadata({
   if (!car) return { title: 'Not found | AutoFair' };
   return {
     title: `${carTitle(car)} | AutoFair`,
-    description: `${carTitle(car)} — ${car.inspectionId}. Sample dossier with inspection, documents and disclosed history.`,
+    description: `${carTitle(car)} — ${car.inspectionId}. Verified dossier with inspection, documents and disclosed history.`,
   };
 }
 
@@ -38,17 +39,20 @@ export default async function CarDetailPage({
 
   const liveRelated = await fetchLiveCars();
   const pool = liveRelated?.length ? liveRelated : cars;
-  const related = pool.filter((c) => c.slug !== car.slug).slice(0, 3);
+  const seen = new Set<string>([car.slug]);
+  const related = pool.filter((c) => {
+    if (c.slug === car.slug || seen.has(c.slug)) return false;
+    seen.add(c.slug);
+    return true;
+  }).slice(0, 3);
 
   return (
     <Container className="pb-16 pt-8">
+      <ViewCounter slug={slug} />
       <nav aria-label="Breadcrumb">
         <Link href="/cars" className="font-sans text-[13px] font-bold text-navy hover:underline">
           ← Back to all files
         </Link>
-        <p className="mt-2 font-mono text-[11px] text-muted">
-          /cars&nbsp;&nbsp;/&nbsp;&nbsp;{car.slug}&nbsp;&nbsp;•&nbsp;&nbsp;{car.inspectionId}
-        </p>
       </nav>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">

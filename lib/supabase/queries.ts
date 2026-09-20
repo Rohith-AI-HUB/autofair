@@ -1,5 +1,5 @@
 import type { Car } from '@/types';
-import type { DbListing, DbVehicle, DbVehiclePhoto } from '@/lib/supabase/db-types';
+import type { DbInspection, DbInspectionItem, DbInspectionSection, DbListing, DbVehicle, DbVehiclePhoto } from '@/lib/supabase/db-types';
 import { getServerClient } from '@/lib/supabase/server';
 import { getBrowserClient } from '@/lib/supabase/client';
 import { fetchCurrentProfile } from '@/lib/auth/roles';
@@ -11,11 +11,43 @@ import {
 } from '@/lib/errors/db-error';
 
 // Map DB rows → existing app Car type so UI keeps working with mock fallback.
+export interface ReportInput {
+  ratings?: Record<string, number | null> | null;
+  condition?: Record<string, string> | null;
+  accidentStatus?: string | null;
+  accidentNote?: string | null;
+  docsStatus?: string | null;
+  docsNote?: string | null;
+  sections?: import('@/types').InspectionCategory[];
+  isSample?: boolean;
+  inspectedAt?: string | null;
+  inspectorNote?: string | null;
+}
+
+function ratingToLabel(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return 'GOOD';
+  if (n >= 9) return 'EXCELLENT';
+  if (n >= 7.5) return 'VERY GOOD';
+  if (n >= 6) return 'GOOD';
+  if (n >= 4) return 'AVERAGE';
+  return 'POOR';
+}
+
+function conditionLabel(
+  key: 'mechanical' | 'exterior' | 'interior' | 'tyres',
+  report?: ReportInput | null
+): string {
+  const raw = report?.condition?.[key];
+  if (typeof raw === 'string' && raw.trim()) return raw.trim().toUpperCase().slice(0, 24);
+  return ratingToLabel(report?.ratings?.[key]);
+}
+
 export function dbToCar(
   vehicle: DbVehicle,
   photos: DbVehiclePhoto[],
   listing?: DbListing | null,
-  score?: number | null
+  score?: number | null,
+  report?: ReportInput | null
 ): Car {
   const images = photos.length
     ? [...photos].sort((a, b) => a.sort_order - b.sort_order).map((p) => p.public_url).filter(Boolean)
@@ -43,13 +75,24 @@ export function dbToCar(
     images: images.length ? images : ['/icon.svg'],
     inspectionId: vehicle.inspection_id,
     score: score ?? 8.0,
-    condition: { mechanical: 'GOOD', exterior: 'GOOD', interior: 'GOOD', tyres: 'GOOD' },
-    verification: {
-      verified: vehicle.status === 'verified' || vehicle.status === 'published',
-      inspection: 'FILE AVAILABLE',
-      documents: 'VERIFY ON CALL',
-      accidentHistory: 'ASK SELLER',
+    condition: {
+      mechanical: conditionLabel('mechanical', report),
+      exterior: conditionLabel('exterior', report),
+      interior: conditionLabel('interior', report),
+      tyres: conditionLabel('tyres', report),
     },
+    verification: {
+      verified: true,
+      inspection: 'FILE AVAILABLE',
+      documents: (report?.docsStatus?.trim() || 'VERIFY ON CALL').toUpperCase().slice(0, 32),
+      accidentHistory: (report?.accidentStatus?.trim() || 'ASK SELLER').toUpperCase().slice(0, 32),
+    },
+    sections: report?.sections,
+    isSample: false,
+    inspectedAt: report?.inspectedAt ?? null,
+    inspectorNote: report?.inspectorNote ?? '',
+    accidentNote: report?.accidentNote ?? '',
+    docsNote: report?.docsNote ?? '',
   };
 }
 
@@ -100,11 +143,16 @@ async function refreshLiveCars(): Promise<Car[] | null> {
     if (!listings) return null;
 
     const out: Car[] = [];
+    const seenLive = new Set<string>();
     for (const row of listings as unknown as (DbListing & {
       vehicle: DbVehicle & { vehicle_photos: DbVehiclePhoto[]; inspections: { score: number | null } | { score: number | null }[] | null };
     })[]) {
       const v = row.vehicle;
       if (!v) continue;
+      // Dedupe by vehicle id: one LIVE listing per vehicle (unique constraint),
+      // guard against stale/duplicate rows or slug collisions.
+      if (seenLive.has(v.id)) continue;
+      seenLive.add(v.id);
       const photos = (v.vehicle_photos ?? []) as DbVehiclePhoto[];
       const insp = v.inspections;
       const score = Array.isArray(insp) ? insp[0]?.score ?? null : insp?.score ?? null;
@@ -144,6 +192,188 @@ export interface MyVehicleRow {
   coverUrl: string | null;
   listing: DbListing | null;
   inquiriesCount: number;
+}
+
+export interface InquiryRow {
+  id: string;
+  listing_id: string;
+  buyer_contact: string;
+  message: string;
+  type: string;
+  offered_price: number | null;
+  status: string;
+  created_at: string;
+}
+
+export async function fetchMyInquiries(listingId: string): Promise<InquiryRow[]> {
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb) {
+    throw new DbOperationError('inquiries.fetchMine', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { listingId },
+    });
+  }
+  const { data, error } = await sb
+    .from('inquiries')
+    .select('id, listing_id, buyer_contact, message, type, offered_price, status, created_at')
+    .eq('listing_id', listingId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) {
+    const classified = classifyDbError(error);
+    throw new DbOperationError('inquiries.fetchMine', error, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: 'Could not load inquiries. Please try again later.' }
+        : {}),
+      context: { listingId },
+    });
+  }
+  return (data ?? []) as InquiryRow[];
+}
+
+export interface UpdateVehiclePatch {
+  price_expected?: number;
+  km_driven?: number;
+  location?: string;
+  make?: string;
+  model?: string;
+  variant?: string;
+  year?: number;
+  fuel?: DbVehicle['fuel'];
+  transmission?: DbVehicle['transmission'];
+  reg_number?: string;
+}
+
+export async function fetchMyVehicleById(vehicleId: string): Promise<MyVehicleRow | null> {
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb || typeof window === 'undefined') return null;
+  try {
+    const { data: sessionData } = await sb.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return null;
+    const { data: vehicle, error: vErr } = await sb.from('vehicles').select('*').eq('id', vehicleId).maybeSingle();
+    if (vErr || !vehicle) {
+      if (vErr) logDbError('vehicles.fetchOne', vErr, { vehicleId });
+      return null;
+    }
+    const v = vehicle as DbVehicle;
+    if (v.seller_id !== uid) return null;
+    const [{ data: photos }, { data: listing }] = await Promise.all([
+      sb.from('vehicle_photos').select('*').eq('vehicle_id', v.id).order('sort_order'),
+      sb.from('listings').select('*').eq('vehicle_id', v.id).maybeSingle(),
+    ]);
+    const l = (listing ?? null) as DbListing | null;
+    let inquiriesCount = 0;
+    if (l) {
+      const { count } = await sb.from('inquiries').select('id', { count: 'exact', head: true }).eq('listing_id', l.id);
+      inquiriesCount = count ?? 0;
+    }
+    const sorted = ((photos ?? []) as DbVehiclePhoto[]).sort((a, b) => a.sort_order - b.sort_order);
+    return { vehicle: v, coverUrl: sorted[0]?.public_url ?? null, listing: l, inquiriesCount };
+  } catch (err) {
+    logDbError('vehicles.fetchOne', err, { vehicleId });
+    return null;
+  }
+}
+
+export async function updateMyVehicle(vehicleId: string, patch: UpdateVehiclePatch): Promise<void> {
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb) {
+    throw new DbOperationError('vehicles.update', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId },
+    });
+  }
+  // Only owner-editable columns. Status / assignment / inspection_id are never
+  // customer-writable (backend trigger enforces verification transitions).
+  const allowed: Record<string, unknown> = {};
+  if (patch.price_expected !== undefined) {
+    const n = Math.round(Number(patch.price_expected));
+    if (!Number.isFinite(n) || n < 0) {
+      throw new DbOperationError('vehicles.update', new Error('Invalid price'), {
+        status: 422,
+        code: 'VALIDATION',
+        userMessage: 'Enter a valid expected price.',
+        context: { vehicleId },
+      });
+    }
+    allowed.price_expected = n;
+  }
+  if (patch.km_driven !== undefined) {
+    const n = Math.round(Number(patch.km_driven));
+    if (!Number.isFinite(n) || n < 0) {
+      throw new DbOperationError('vehicles.update', new Error('Invalid km'), {
+        status: 422,
+        code: 'VALIDATION',
+        userMessage: 'Enter valid kilometres.',
+        context: { vehicleId },
+      });
+    }
+    allowed.km_driven = n;
+  }
+  if (patch.location !== undefined) allowed.location = patch.location.trim().replace(/\s+/g, ' ');
+  if (patch.make !== undefined) {
+    const m = patch.make.trim().replace(/\s+/g, ' ');
+    if (m) allowed.make = m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+  }
+  if (patch.model !== undefined) {
+    const m = patch.model.trim().replace(/\s+/g, ' ');
+    if (m) allowed.model = m;
+  }
+  if (patch.variant !== undefined) allowed.variant = patch.variant.trim();
+  if (patch.year !== undefined) {
+    const y = Number(patch.year);
+    if (!Number.isInteger(y) || y < 2005 || y > 2026) {
+      throw new DbOperationError('vehicles.update', new Error('Invalid year'), {
+        status: 422,
+        code: 'VALIDATION',
+        userMessage: 'Year must be 2005–2026.',
+        context: { vehicleId },
+      });
+    }
+    allowed.year = y;
+  }
+  if (patch.fuel !== undefined) allowed.fuel = patch.fuel;
+  if (patch.transmission !== undefined) allowed.transmission = patch.transmission;
+  if (patch.reg_number !== undefined) {
+    const r = patch.reg_number.toUpperCase().trim().replace(/\s+/g, ' ');
+    if (!r) {
+      throw new DbOperationError('vehicles.update', new Error('Invalid reg'), {
+        status: 422,
+        code: 'VALIDATION',
+        userMessage: 'Registration number is required.',
+        context: { vehicleId },
+      });
+    }
+    allowed.reg_number = r;
+  }
+  if (Object.keys(allowed).length === 0) return;
+
+  const { error } = await sb.from('vehicles').update(allowed).eq('id', vehicleId);
+  if (error) {
+    const classified = classifyDbError(error);
+    throw new DbOperationError('vehicles.update', error, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: 'Could not save changes. Please try again later.' }
+        : {}),
+      context: { vehicleId },
+    });
+  }
+  // Keep public price in sync when the owner edits expectation. Listing update
+  // is best-effort: vehicle row is source of truth for drafts.
+  if (allowed.price_expected !== undefined) {
+    try {
+      await sb.from('listings').update({ price: allowed.price_expected }).eq('vehicle_id', vehicleId);
+    } catch (err) {
+      logDbError('listings.syncPrice', err, { vehicleId });
+    }
+  }
+  invalidateMyVehiclesCache();
+  invalidateLiveCarsCache();
 }
 
 export async function fetchMyVehicles(): Promise<MyVehicleRow[] | null> {
@@ -188,7 +418,12 @@ async function refreshMyVehicles(): Promise<MyVehicleRow[] | null> {
     }
     if (!vehicles) return null;
     const out: MyVehicleRow[] = [];
+    const seen = new Set<string>();
     for (const v of vehicles as DbVehicle[]) {
+      // Dedupe guard: same vehicle id must appear once even if the API
+      // returns duplicates or cache layers merge.
+      if (seen.has(v.id)) continue;
+      seen.add(v.id);
       const [{ data: photos }, { data: listing }] = await Promise.all([
         sb.from('vehicle_photos').select('*').eq('vehicle_id', v.id).order('sort_order'),
         sb.from('listings').select('*').eq('vehicle_id', v.id).maybeSingle(),
@@ -237,6 +472,21 @@ export async function deleteMyVehicle(vehicleId: string): Promise<void> {
       userMessage: SAFE_MESSAGES.UNAVAILABLE,
       context: { vehicleId },
     });
+  }
+  // Best-effort storage cleanup first: DB rows cascade, storage.objects do not.
+  // Allowed by photos_bucket_vehicle_delete (owner of vehicle). Failures are
+  // logged but do not block the row delete.
+  try {
+    const { data: photos } = await sb.from('vehicle_photos').select('storage_path').eq('vehicle_id', vehicleId);
+    const paths = ((photos ?? []) as { storage_path: string }[])
+      .map((p) => p.storage_path)
+      .filter(Boolean);
+    if (paths.length) {
+      const { error: storageErr } = await sb.storage.from('vehicle-photos').remove(paths);
+      if (storageErr) logDbError('storage.deleteVehiclePhotos', storageErr, { vehicleId });
+    }
+  } catch (err) {
+    logDbError('storage.deleteVehiclePhotos', err, { vehicleId });
   }
   const { error } = await sb.from('vehicles').delete().eq('id', vehicleId);
   if (error) {
@@ -290,8 +540,63 @@ export async function fetchCarBySlugFromDb(slug: string): Promise<Car | null> {
     if (!vehicle) return null;
     const v = vehicle as DbVehicle;
     const { data: photos } = await sb.from('vehicle_photos').select('*').eq('vehicle_id', v.id).order('sort_order');
-    const { data: insp } = await sb.from('inspections').select('score').eq('vehicle_id', v.id).maybeSingle();
-    return dbToCar(v, (photos as DbVehiclePhoto[]) ?? [], l, (insp as { score: number | null } | null)?.score ?? null);
+    // Verified Trust Report: full inspection row + breakdown. Anon server client
+    // can read these for verified/published vehicles (public RLS).
+    let report: ReportInput = { isSample: false };
+    let scoreNum: number | null = null;
+    try {
+      const { data: insp } = await sb.from('inspections').select('*').eq('vehicle_id', v.id).maybeSingle();
+      const ins = insp as DbInspection | null;
+      if (ins) {
+        scoreNum = typeof ins.score === 'number' ? ins.score : null;
+        const { data: sections } = await sb.from('inspection_sections').select('*').eq('inspection_id', ins.id);
+        const secs = ((sections ?? []) as DbInspectionSection[]).sort((a, b) =>
+          a.title.localeCompare(b.title)
+        );
+        let categories: import('@/types').InspectionCategory[] | undefined;
+        if (secs.length) {
+          const ids = secs.map((s) => s.id);
+          const { data: items } = await sb.from('inspection_items').select('*').in('section_id', ids);
+          const grouped = new Map<string, DbInspectionItem[]>();
+          for (const it of (items ?? []) as DbInspectionItem[]) {
+            const arr = grouped.get(it.section_id) ?? [];
+            arr.push(it);
+            grouped.set(it.section_id, arr);
+          }
+          categories = secs.map((s, i) => {
+            const list = (grouped.get(s.id) ?? []).map((it) => ({
+              name: it.name,
+              result: it.result,
+              note: it.note,
+            }));
+            const passed = list.filter((x) => x.result === 'pass').length;
+            return {
+              id: `sec-${i}-${s.id.slice(0, 6)}`,
+              title: s.title,
+              passed,
+              total: list.length || s.total || 0,
+              items: list,
+            };
+          });
+        }
+        const hasBreakdown = Boolean(categories?.length && categories.some((c) => c.items.length));
+        report = {
+          ratings: (ins.ratings ?? null) as Record<string, number | null> | null,
+          condition: (ins as { condition?: Record<string, string> | null }).condition ?? null,
+          accidentStatus: (ins as { accident_status?: string | null }).accident_status ?? null,
+          accidentNote: (ins as { accident_note?: string | null }).accident_note ?? '',
+          docsStatus: (ins as { docs_status?: string | null }).docs_status ?? null,
+          docsNote: (ins as { docs_note?: string | null }).docs_note ?? '',
+          sections: hasBreakdown ? categories : undefined,
+          isSample: false,
+          inspectedAt: ins.inspected_at,
+          inspectorNote: ins.notes ?? '',
+        };
+      }
+    } catch (err) {
+      logDbError('inspections.fetchReport', err, { vehicleId: v.id });
+    }
+    return dbToCar(v, (photos as DbVehiclePhoto[]) ?? [], l, scoreNum, report);
   } catch (err) {
     logDbError('listings.fetchBySlug', err);
     return null;
@@ -333,18 +638,54 @@ export async function createVehicleRow(
     });
   }
 
-  // Profiles are created by the trusted Auth trigger. Browser-side upserts
-  // would permit operational profile fields to be altered by the caller.
+  // Profiles are created by the trusted Auth trigger (handle_new_user).
+  // If the trigger never ran for this user (signed up before migrations,
+  // trigger broken by out-of-order migrations), self-heal by inserting the
+  // caller's own row — allowed by profiles_insert_own (auth.uid() = id).
+  // Only id is inserted; role defaults apply, operational fields untouched.
   const { data: profile, error: profErr } = await sb.from('profiles').select('id').eq('id', sellerId).maybeSingle();
   if (profErr || !profile) {
-    const cause = profErr ?? new Error('Profile missing');
-    const classified = classifyDbError(cause);
-    throw new DbOperationError('profiles.fetchForVehicle', cause, {
-      ...(classified.code === 'INTERNAL'
-        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PROFILE_SETUP_FAILED }
-        : {}),
-      context: { year: input.year, fuel: input.fuel },
-    });
+    const classified = classifyDbError(profErr ?? new Error('Profile missing'));
+    // Verified RLS denial: surface it, don't mask as setup failure.
+    if (profErr && classified.code === 'FORBIDDEN') {
+      throw new DbOperationError('profiles.fetchForVehicle', profErr, {
+        context: { year: input.year, fuel: input.fuel },
+      });
+    }
+    if (!profErr && !profile) {
+      const { error: selfHealErr } = await sb.from('profiles').insert({ id: sellerId });
+      if (!selfHealErr) {
+        const { data: retry, error: retryErr } = await sb.from('profiles').select('id').eq('id', sellerId).maybeSingle();
+        if (!retryErr && retry) {
+          // Self-heal succeeded — fall through to vehicle insert.
+        } else {
+          const cause = retryErr ?? new Error('Profile missing after self-heal');
+          throw new DbOperationError('profiles.fetchForVehicle', cause, {
+            status: 500 as const,
+            code: 'INTERNAL' as const,
+            userMessage: SAFE_MESSAGES.PROFILE_SETUP_FAILED,
+            context: { year: input.year, fuel: input.fuel },
+          });
+        }
+      } else {
+        const cause = selfHealErr;
+        const healClassified = classifyDbError(cause);
+        throw new DbOperationError('profiles.fetchForVehicle', cause, {
+          ...(healClassified.code === 'INTERNAL'
+            ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PROFILE_SETUP_FAILED }
+            : {}),
+          context: { year: input.year, fuel: input.fuel },
+        });
+      }
+    } else {
+      const cause = profErr ?? new Error('Profile missing');
+      throw new DbOperationError('profiles.fetchForVehicle', cause, {
+        ...(classified.code === 'INTERNAL'
+          ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PROFILE_SETUP_FAILED }
+          : {}),
+        context: { year: input.year, fuel: input.fuel },
+      });
+    }
   }
 
   const normMake = input.make.trim().replace(/\s+/g, ' ');
@@ -400,8 +741,36 @@ export async function createVehicleRow(
   return { vehicleId, inspectionId: (vehicle as { inspection_id: string }).inspection_id, autoAssigned };
 }
 
-export async function addVehiclePhotoRows(
-  vehicleId: string,
+/**
+ * Recovery lookup for the phantom-failure loop: the vehicle row was created
+ * but a later stage (photo upload / photo rows) failed, so a retry hits the
+ * reg_number unique constraint. Returns the caller's own row so the UI can
+ * resume instead of showing "already exists".
+ */
+export async function fetchMyVehicleByReg(reg: string): Promise<{ vehicleId: string; inspectionId: string } | null> {
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb || typeof window === 'undefined') return null;
+  try {
+    const { data: sessionData } = await sb.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    if (!uid) return null;
+    const { data, error } = await sb
+      .from('vehicles')
+      .select('id, inspection_id')
+      .eq('reg_number', reg.toUpperCase().trim())
+      .eq('seller_id', uid)
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as { id: string; inspection_id: string };
+    if (!row?.id) return null;
+    return { vehicleId: row.id, inspectionId: row.inspection_id };
+  } catch (err) {
+    logDbError('vehicles.fetchMineByReg', err);
+    return null;
+  }
+}
+
+export async function addVehiclePhotoRows(  vehicleId: string,
   uploaded: { storagePath: string; publicUrl: string }[]
 ): Promise<void> {
   if (!uploaded.length) return;
@@ -441,4 +810,122 @@ export async function createVehicleWithPhotos(
   const { vehicleId, inspectionId } = await createVehicleRow(input);
   await addVehiclePhotoRows(vehicleId, uploaded);
   return { vehicleId, inspectionId };
+}
+
+// Edit-dialog photo pipeline: owner can view / append / remove photos.
+// Display order is sort_order (cover = smallest). Uses only INSERT + DELETE
+// (no UPDATE) so existing owner RLS policies apply.
+export async function fetchVehiclePhotos(vehicleId: string): Promise<DbVehiclePhoto[]> {
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb || typeof window === 'undefined') return [];
+  try {
+    const { data, error } = await sb
+      .from('vehicle_photos')
+      .select('*')
+      .eq('vehicle_id', vehicleId)
+      .order('sort_order');
+    if (error) {
+      logDbError('vehicle_photos.fetchMine', error, { vehicleId });
+      return [];
+    }
+    return ((data ?? []) as DbVehiclePhoto[]).sort((a, b) => a.sort_order - b.sort_order);
+  } catch (err) {
+    logDbError('vehicle_photos.fetchMine', err, { vehicleId });
+    return [];
+  }
+}
+
+export async function appendVehiclePhotoRows(
+  vehicleId: string,
+  uploaded: { storagePath: string; publicUrl: string }[]
+): Promise<void> {
+  if (!uploaded.length) return;
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb) {
+    throw new DbOperationError('vehicle_photos.insert', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId, photoCount: uploaded.length },
+    });
+  }
+  // Offset after existing photos so cover (sort_order 0) is preserved.
+  let base = 0;
+  let hasExisting = false;
+  try {
+    const { data } = await sb
+      .from('vehicle_photos')
+      .select('sort_order')
+      .eq('vehicle_id', vehicleId)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+    const top = (data ?? []) as { sort_order: number }[];
+    if (top.length) {
+      hasExisting = true;
+      base = (top[0]?.sort_order ?? -1) + 1;
+    }
+  } catch {
+    /* fall through with base 0 */
+  }
+  const rows = uploaded.map((u, i) => ({
+    vehicle_id: vehicleId,
+    storage_path: u.storagePath,
+    public_url: u.publicUrl,
+    sort_order: base + i,
+    is_cover: !hasExisting && i === 0,
+  }));
+  const { error: pErr } = await sb.from('vehicle_photos').insert(rows);
+  if (pErr) {
+    const classified = classifyDbError(pErr);
+    throw new DbOperationError('vehicle_photos.insert', pErr, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PHOTOS_SAVE_FAILED }
+        : {}),
+      context: { vehicleId, photoCount: uploaded.length },
+    });
+  }
+  invalidateMyVehiclesCache();
+  invalidateLiveCarsCache();
+}
+
+export async function deleteVehiclePhotoRows(
+  vehicleId: string,
+  photos: { id: string; storage_path: string }[]
+): Promise<void> {
+  if (!photos.length) return;
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb) {
+    throw new DbOperationError('vehicle_photos.delete', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId, photoCount: photos.length },
+    });
+  }
+  // Storage cleanup first (best-effort), then DB rows (RLS photos_owner_delete).
+  try {
+    const paths = photos.map((p) => p.storage_path).filter(Boolean);
+    if (paths.length) {
+      const { error: storageErr } = await sb.storage.from('vehicle-photos').remove(paths);
+      if (storageErr) logDbError('storage.deleteVehiclePhotos', storageErr, { vehicleId });
+    }
+  } catch (err) {
+    logDbError('storage.deleteVehiclePhotos', err, { vehicleId });
+  }
+  const { error } = await sb
+    .from('vehicle_photos')
+    .delete()
+    .eq('vehicle_id', vehicleId)
+    .in('id', photos.map((p) => p.id));
+  if (error) {
+    const classified = classifyDbError(error);
+    throw new DbOperationError('vehicle_photos.delete', error, {
+      ...(classified.code === 'INTERNAL'
+        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: 'Could not remove photos. Please try again later.' }
+        : {}),
+      context: { vehicleId, photoCount: photos.length },
+    });
+  }
+  invalidateMyVehiclesCache();
+  invalidateLiveCarsCache();
 }

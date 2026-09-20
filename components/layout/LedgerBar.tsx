@@ -55,7 +55,7 @@ export function LedgerBar() {
           .join(' / ');
         return `FIELD DOSSIER  ●  ${live.length} LIVE  ●  ${top || 'ALL CITIES'}`;
       })()
-    : 'FIELD DOSSIER  ●  SAMPLE DATA  ●  BANGALORE / MUMBAI / DELHI';
+    : 'FIELD DOSSIER  ●  LIVE STOCK';
 
   const rightId = live?.[0]?.inspectionId ?? 'AF-2026-008421';
   const rightTime = now ? formatIST(now) : '10 SEP 2026  14:32 IST';

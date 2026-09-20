@@ -195,8 +195,19 @@ export function AuthForm({
   }
 
   async function signOut() {
-    const { persist } = await getSessionFromAnyStore();
-    await getBrowserClient(persist)?.auth.signOut();
+    // Clear BOTH stores: a remembered session in localStorage survives a
+    // single-store signOut and getSessionFromAnyStore() would find it again,
+    // making it look like sign-out did nothing.
+    try {
+      await getBrowserClient('local')?.auth.signOut();
+    } catch {
+      /* sign-out must never throw */
+    }
+    try {
+      await getBrowserClient('session')?.auth.signOut();
+    } catch {
+      /* sign-out must never throw */
+    }
     setAuthedEmail(null);
     router.refresh();
   }

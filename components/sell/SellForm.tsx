@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { ChevronDown, ImagePlus } from 'lucide-react';
 import { Container } from '@/components/shared/Container';
 import { cn } from '@/lib/utils';
-import { createVehicleRow, addVehiclePhotoRows, invalidateMyVehiclesCache } from '@/lib/supabase/queries';
+import { createVehicleRow, addVehiclePhotoRows, invalidateMyVehiclesCache, invalidateLiveCarsCache, fetchMyVehicleById, fetchMyVehicleByReg, updateMyVehicle } from '@/lib/supabase/queries';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
-import { isSupabaseConfigured } from '@/lib/supabase/client';
-import { getSafeErrorMessage } from '@/lib/errors/db-error';
+import { isSupabaseConfigured, getBrowserClient } from '@/lib/supabase/client';
+import { DbOperationError, getSafeErrorMessage } from '@/lib/errors/db-error';
 import { openAuthModal } from '@/lib/auth/modal';
 
 type Fields = {
@@ -20,6 +20,7 @@ type Fields = {
   transmission: string;
   km: string;
   location: string;
+  price: string;
 };
 
 const initial: Fields = {
@@ -31,6 +32,7 @@ const initial: Fields = {
   transmission: '',
   km: '',
   location: '',
+  price: '',
 };
 
 interface Photo {
@@ -49,6 +51,9 @@ let photoSeq = 0;
 export function SellForm() {
   const router = useRouter();
   const [f, setF] = useState<Fields>(initial);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [existingPhotos, setExistingPhotos] = useState(0);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields | 'photos' | 'submit', string>>>({});
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -57,6 +62,10 @@ export function SellForm() {
   const [inspectionId, setInspectionId] = useState<string | null>(null);
   const [savedToDb, setSavedToDb] = useState(false);
   const [assignmentStatus, setAssignmentStatus] = useState<'assigned' | 'pending' | null>(null);
+  // Recovery state for the phantom-failure loop: stage 1 (vehicle row)
+  // committed but a later stage failed, or a retry hit reg_number 409.
+  // Rendered as its own panel with a resume CTA — never a dead-end alert.
+  const [recovery, setRecovery] = useState<{ vehicleId: string; inspectionId: string; reason: 'photos-failed' | 'already-exists' } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const [scrollPct, setScrollPct] = useState(0);
@@ -68,6 +77,44 @@ export function SellForm() {
         return ps;
       });
     };
+  }, []);
+
+  // Edit / resume-draft mode: /sell-your-car?resume=<vehicleId> or ?vehicleId=
+  // prefills the owner's row so Edit and Resume draft land here with data.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const id = q.get('resume') || q.get('vehicleId');
+      if (!id) return;
+      setEditLoading(true);
+      fetchMyVehicleById(id).then((row) => {
+        setEditLoading(false);
+        if (!row) return;
+        setEditId(row.vehicle.id);
+        setF({
+          reg: row.vehicle.reg_number ?? '',
+          make: row.vehicle.make ?? '',
+          model: row.vehicle.model ?? '',
+          year: String(row.vehicle.year ?? ''),
+          fuel: row.vehicle.fuel ?? '',
+          transmission: row.vehicle.transmission ?? '',
+          km: String(row.vehicle.km_driven ?? ''),
+          location: row.vehicle.location ?? '',
+          price: String(row.listing?.price ?? row.vehicle.price_expected ?? ''),
+        });
+        const sb = getBrowserClient('local') ?? getBrowserClient('session');
+        if (sb) {
+          sb.from('vehicle_photos')
+            .select('id', { count: 'exact', head: true })
+            .eq('vehicle_id', row.vehicle.id)
+            .then(({ count }) => {
+              if (typeof count === 'number') setExistingPhotos(count);
+            });
+        }
+      });
+    } catch {
+      setEditLoading(false);
+    }
   }, []);
 
   function set<K extends keyof Fields>(k: K, v: string) {
@@ -140,7 +187,10 @@ export function SellForm() {
     if (!f.km.trim()) e.km = 'Kilometres required.';
     else if (!/^\d+$/.test(f.km.replace(/,/g, ''))) e.km = 'Digits only.';
     if (!f.location.trim()) e.location = 'City is required.';
-    if (photos.length === 0) e.photos = 'Add at least 1 photo.';
+    if (!f.price.trim()) e.price = 'Expected price required.';
+    else if (!/^\d+$/.test(f.price.replace(/,/g, '').trim())) e.price = 'Digits only, e.g. 1240000.';
+    // In edit/resume mode existing DB photos satisfy the requirement.
+    if (photos.length === 0 && !(editId && existingPhotos > 0)) e.photos = 'Add at least 1 photo.';
     return e;
   }
 
@@ -157,25 +207,109 @@ export function SellForm() {
     }
     setSubmitting(true);
     setErrors((prev) => ({ ...prev, submit: undefined }));
+    setRecovery(null);
     try {
       const year = Number(f.year.trim());
       const km = Number(f.km.replace(/,/g, '').trim());
-      const { vehicleId, inspectionId: newId, autoAssigned } = await createVehicleRow({
-        reg: f.reg,
-        make: f.make,
-        model: f.model,
-        year,
-        fuel: f.fuel as 'Petrol' | 'Diesel' | 'CNG' | 'Electric' | 'Hybrid',
-        transmission: f.transmission as 'Manual' | 'Automatic' | 'AMT' | 'CVT',
-        km,
-        location: f.location,
-      });
-      // Upload compressed WebP to Supabase Storage (0-rupee pipeline)
-      const uploaded = await uploadVehiclePhotos(
-        vehicleId,
-        photos.map((p) => p.file)
-      );
-      await addVehiclePhotoRows(vehicleId, uploaded);
+      const priceExpected = Number(f.price.replace(/,/g, '').trim());
+      // Edit / resume-draft: update the owner's row instead of inserting.
+      if (editId) {
+        await updateMyVehicle(editId, {
+          make: f.make,
+          model: f.model,
+          year,
+          fuel: f.fuel as 'Petrol' | 'Diesel' | 'CNG' | 'Electric' | 'Hybrid',
+          transmission: f.transmission as 'Manual' | 'Automatic' | 'AMT' | 'CVT',
+          km_driven: km,
+          location: f.location,
+          price_expected: priceExpected,
+        });
+        if (photos.length) {
+          try {
+            const uploaded = await uploadVehiclePhotos(
+              editId,
+              photos.map((p) => p.file)
+            );
+            await addVehiclePhotoRows(editId, uploaded);
+          } catch (photoErr) {
+            // Details saved; only the new photos failed. Resume instead of
+            // reporting a total failure.
+            invalidateMyVehiclesCache();
+            invalidateLiveCarsCache();
+            const row = await fetchMyVehicleById(editId).catch(() => null);
+            setRecovery({
+              vehicleId: editId,
+              inspectionId: row?.vehicle.inspection_id ?? '',
+              reason: 'photos-failed',
+            });
+            setErrors((prev) => ({
+              ...prev,
+              submit: `${getSafeErrorMessage(photoErr, 'Details saved, but the new photos could not be uploaded.')} Your file is kept — resume it from My Listings.`,
+            }));
+            return;
+          }
+        }
+        invalidateMyVehiclesCache();
+        invalidateLiveCarsCache();
+        router.replace('/my-listings');
+        router.refresh();
+        return;
+      }
+      // Stage 1: vehicle row. On reg_number 409, recover the caller's own
+      // row (phantom-failure retry) instead of a dead-end "already exists".
+      let vehicleId: string;
+      let newId: string;
+      let autoAssigned = false;
+      try {
+        const created = await createVehicleRow({
+          reg: f.reg,
+          make: f.make,
+          model: f.model,
+          year,
+          fuel: f.fuel as 'Petrol' | 'Diesel' | 'CNG' | 'Electric' | 'Hybrid',
+          transmission: f.transmission as 'Manual' | 'Automatic' | 'AMT' | 'CVT',
+          km,
+          location: f.location,
+          priceExpected,
+        });
+        vehicleId = created.vehicleId;
+        newId = created.inspectionId;
+        autoAssigned = created.autoAssigned;
+      } catch (createErr) {
+        const isConflict =
+          createErr instanceof DbOperationError &&
+          (createErr.status === 409 || createErr.code === 'CONFLICT');
+        if (isConflict) {
+          const own = await fetchMyVehicleByReg(f.reg).catch(() => null);
+          if (own) {
+            setRecovery({ vehicleId: own.vehicleId, inspectionId: own.inspectionId, reason: 'already-exists' });
+            setErrors((prev) => ({
+              ...prev,
+              submit: `This registration was already submitted as file ${own.inspectionId}. Your details are safe — continue where you left off.`,
+            }));
+            return;
+          }
+        }
+        throw createErr;
+      }
+      // Stages 2+3: photo upload + photo rows. The vehicle row already
+      // exists here, so a failure must offer resume — never "try again".
+      try {
+        // Upload compressed WebP to Supabase Storage (0-rupee pipeline)
+        const uploaded = await uploadVehiclePhotos(
+          vehicleId,
+          photos.map((p) => p.file)
+        );
+        await addVehiclePhotoRows(vehicleId, uploaded);
+      } catch (photoErr) {
+        invalidateMyVehiclesCache();
+        setRecovery({ vehicleId, inspectionId: newId, reason: 'photos-failed' });
+        setErrors((prev) => ({
+          ...prev,
+          submit: `${getSafeErrorMessage(photoErr, 'Vehicle saved, but photos could not be uploaded.')} Your file ${newId} is kept — add photos from My Listings.`,
+        }));
+        return;
+      }
       invalidateMyVehiclesCache();
       setInspectionId(newId);
       setAssignmentStatus(autoAssigned ? 'assigned' : 'pending');
@@ -222,6 +356,7 @@ export function SellForm() {
             setInspectionId(null);
             setSavedToDb(false);
             setAssignmentStatus(null);
+            setRecovery(null);
           }}
           className="mt-5 border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy"
         >
@@ -241,6 +376,16 @@ export function SellForm() {
       onSubmit={handleSubmit}
       className="border border-line bg-white p-6 md:p-10"
     >
+      {editLoading && (
+        <p className="border border-teal-line bg-teal-bg px-4 py-3 font-mono text-[11px] text-teal-dark" role="status">
+          LOADING YOUR FILE…
+        </p>
+      )}
+      {editId && !editLoading && (
+        <p className="border border-amber/60 bg-[#FFFBEB] px-4 py-3 font-mono text-[11px] text-navy" role="status">
+          EDITING FILE — {editId.slice(0, 8).toUpperCase()} · changes save to the same inspection file{existingPhotos > 0 ? ` · ${existingPhotos} photo${existingPhotos === 1 ? '' : 's'} already saved` : ''}.
+        </p>
+      )}
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
@@ -306,6 +451,26 @@ export function SellForm() {
             error={errors.km}
             className={textCls}
           />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            id="sell-price"
+            label="EXPECTED PRICE (₹) *"
+            value={f.price}
+            onChange={(v) => set('price', v)}
+            placeholder="1240000"
+            inputMode="numeric"
+            error={errors.price}
+            className={textCls}
+          />
+          <div className="flex items-end pb-1">
+            <p className="font-sans text-[12px] leading-relaxed text-muted">
+              {f.price.trim() && /^\d+$/.test(f.price.replace(/,/g, '').trim())
+                ? `≈ ₹${(Number(f.price.replace(/,/g, '')) / 100000).toFixed(2)} Lakh — shown as EXPECTED PRICE in your garage.`
+                : 'Shown as EXPECTED PRICE until verified, then as listing price.'}
+            </p>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -508,7 +673,7 @@ export function SellForm() {
           disabled={submitting}
           className="w-full bg-navy px-6 py-5 font-sans text-[16px] font-bold text-white hover:bg-navy-2 disabled:opacity-60"
         >
-          {submitting ? 'Saving + uploading…' : 'Submit for review\u00a0\u00a0→'}
+          {submitting ? 'Saving + uploading…' : editId ? 'Save changes  →' : 'Submit for review  →'}
         </button>
         {errors.submit && (
           <p role="alert" className="font-sans text-[13px] font-semibold text-[#DC2626]">
@@ -523,6 +688,43 @@ export function SellForm() {
               </button>
             )}
           </p>
+        )}
+        {recovery && (
+          <div role="status" className="border border-teal-line bg-teal-bg p-4">
+            <p className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">
+              {recovery.reason === 'already-exists' ? 'FILE ALREADY SUBMITTED' : 'FILE SAVED — PHOTOS PENDING'}
+              {recovery.inspectionId ? ` • ${recovery.inspectionId}` : ''}
+            </p>
+            <p className="mt-1 font-sans text-[13px] text-navy">
+              {recovery.reason === 'already-exists'
+                ? 'No need to submit again — open your garage to continue.'
+                : 'Your vehicle is saved. Add the pending photos from your garage.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  invalidateMyVehiclesCache();
+                  router.replace('/my-listings');
+                  router.refresh();
+                }}
+                className="bg-navy px-5 py-3 font-sans text-[13px] font-bold text-white hover:bg-navy-2"
+              >
+                Open My Listings →
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  invalidateMyVehiclesCache();
+                  router.replace(`/sell-your-car?resume=${recovery.vehicleId}`);
+                  router.refresh();
+                }}
+                className="border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy"
+              >
+                Resume file →
+              </button>
+            </div>
+          </div>
         )}
         <p className="-mt-2 font-sans text-[11px] leading-relaxed text-muted">
           No listing goes live without physical verification and approval.

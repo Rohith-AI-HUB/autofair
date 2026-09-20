@@ -11,6 +11,9 @@ export interface Listing {
   slug: string;
   title: string;
   price: string;
+  priceNum: number;
+  createdAt: number;
+  publishedAt: number | null;
   priceLabel: string;
   spec: string;
   inspectionId: string;
@@ -33,6 +36,9 @@ export const listings: Listing[] = [
     slug: '2022-hyundai-creta-sx',
     title: '2022 Hyundai Creta SX',
     price: '₹12.40 Lakh',
+    priceNum: 1240000,
+    createdAt: 1700000000000,
+    publishedAt: 1700000000000,
     priceLabel: 'VIEW INQUIRIES (14) →',
     spec: '2022  •  PETROL  •  28K KM  •  KA-05-MN-4218',
     inspectionId: 'AF-2026-008421',
@@ -57,6 +63,9 @@ export const listings: Listing[] = [
     slug: '2021-maruti-baleno-zeta',
     title: '2021 Maruti Baleno Zeta',
     price: '₹7.85 Lakh',
+    priceNum: 785000,
+    createdAt: 1699900000000,
+    publishedAt: null,
     priceLabel: 'WHAT HAPPENS NEXT?',
     spec: '2021  •  PETROL  •  41K KM  •  KA-03-NP-7731',
     inspectionId: 'AF-2026-008417',
@@ -79,6 +88,9 @@ export const listings: Listing[] = [
     slug: '2019-hyundai-i20-asta',
     title: '2019 Hyundai i20 Asta',
     price: '₹6.25 Lakh',
+    priceNum: 625000,
+    createdAt: 1699800000000,
+    publishedAt: null,
     priceLabel: 'EXPECTED PRICE',
     spec: '2019  •  DIESEL  •  62K KM  •  DOCS PENDING',
     inspectionId: 'AF-2026-008398',

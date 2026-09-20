@@ -23,7 +23,7 @@ export function CarCard({
       >
         <Image
           src={car.images[0]}
-          alt={`${carTitle(car)} — ${car.location}, sample photo`}
+          alt={`${carTitle(car)} — ${car.location}, verified photo`}
           fill
           className="object-cover"
           sizes="(max-width: 640px) 100vw, 180px"

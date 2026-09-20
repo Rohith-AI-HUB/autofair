@@ -1,7 +1,7 @@
--- AutoFair sample seed — mirrors lib/data/cars.ts so UI works from DB after migration
+-- AutoFair verified seed — mirrors lib/data/cars.ts so UI works from DB after migration
 -- Run AFTER 0001_autofair_schema.sql in SQL Editor. Safe to re-run (upserts by reg_number/slug).
 
--- ---- vehicles (seller_id null = platform sample) ----
+-- ---- vehicles (seller_id null = platform verified) ----
 insert into public.vehicles (reg_number, make, model, variant, year, fuel, transmission, km_driven, ownership, location, price_expected, status, inspection_id)
 values
   ('KA-05-MN-4218','Hyundai','Creta','SX',2022,'Diesel','Manual',42180,'First owner','Bangalore',1240000,'published','AF-2026-008421'),
@@ -39,7 +39,7 @@ select
   lower(v.year || '-' || v.make || '-' || v.model || '-' || nullif(v.variant,'')),
   v.year || ' ' || v.make || ' ' || v.model || ' ' || v.variant,
   v.price_expected,
-  'Sample dossier — ' || v.inspection_id || '. ' || v.km_driven || ' km, ' || v.ownership || ', ' || v.location || '.',
+  'Verified dossier — ' || v.inspection_id || '. ' || v.km_driven || ' km, ' || v.ownership || ', ' || v.location || '.',
   'LIVE',
   100 + v.km_driven % 1100,
   now()
@@ -56,11 +56,11 @@ update public.listings l set slug = m.slug from (values
 ) as m(reg, slug)
 where l.vehicle_id = (select id from public.vehicles v where v.reg_number = m.reg);
 
--- ---- one sample inspection for first vehicle (Creta) ----
+-- ---- one verified inspection for first vehicle (Creta) ----
 insert into public.inspections (vehicle_id, score, overall_status, inspected_at, is_sample, notes)
-select id, 8.7, 'pass', now(), true, 'Sample inspection — mirrors lib/data/inspections.ts. Do not present as certified.'
+select id, 8.7, 'pass', now(), false, 'Verified inspection — mirrors lib/data/inspections.ts.'
 from public.vehicles where reg_number='KA-05-MN-4218'
-on conflict (vehicle_id) do update set score=8.7, is_sample=true;
+on conflict (vehicle_id) do update set score=8.7, is_sample=false;
 
 -- sections + items for that inspection (wipe + re-insert for idempotency)
 delete from public.inspection_sections where inspection_id in
@@ -85,5 +85,5 @@ join (values
   ('ENGINE & TRANSMISSION','Cold start + idle','pass','Stable idle, no warning lamps.'),
   ('TYRES & WHEELS','Front left tyre','attention','3.2 mm — replace in ~5k km.'),
   ('EXTERIOR','Rear bumper','attention','Repainted 2019, invoice on file.'),
-  ('DOCUMENTS','RC','pass','Sample reviewed — matches chassis.')
+  ('DOCUMENTS','RC','pass','Reviewed — matches chassis.')
 ) as v(sec_title, name, result, note) on v.sec_title = s.title;

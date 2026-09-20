@@ -31,8 +31,17 @@ export function CarsExplorer() {
   // + saved city load in effects so back-navigation still feels instant
   // without SSR text mismatch (6 vs 7 files).
   const [liveCars, setLiveCars] = useState<Car[] | null>(null);
-  const [source, setSource] = useState<'live' | 'sample'>('sample');
-  const cars = liveCars ?? seedCars;
+  // Dedupe guard: one card per vehicle id even if live + cache layers overlap
+  // or slugs collide. Keyed by id, never slug.
+  const cars = useMemo(() => {
+    const pool = liveCars ?? seedCars;
+    const seen = new Set<string>();
+    return pool.filter((c) => {
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
+  }, [liveCars]);
   const makes = useMemo(() => {
     // Dedupe case-insensitively: "Kia" (seed) + "KIA" (user typed) must be one pill.
     const seen = new Map<string, string>();
@@ -79,7 +88,6 @@ export function CarsExplorer() {
       if (cancelled) return;
       if (rows && rows.length) {
         setLiveCars(rows);
-        setSource('live');
       }
     });
     return () => {
@@ -188,9 +196,6 @@ export function CarsExplorer() {
 
   return (
     <Container className="pb-16 pt-10">
-      <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
-        INDEX&nbsp;&nbsp;/&nbsp;&nbsp;ALL DOSSIERS&nbsp;&nbsp;•&nbsp;&nbsp;VERIFICATION UPFRONT
-      </p>
       <h1 className="mt-3 font-sans text-[36px] font-extrabold tracking-[-0.02em] text-navy md:text-[52px]">
         Browse verified used cars.
       </h1>
@@ -257,7 +262,7 @@ export function CarsExplorer() {
         )}
         <div>
           <p className="font-mono text-[11px] text-muted" role="status" aria-live="polite">
-            {filtered.length} FILE{filtered.length === 1 ? '' : 'S'} — {source === 'live' ? 'LIVE FROM SUPABASE' : 'SAMPLE DATA'}
+            {filtered.length} FILE{filtered.length === 1 ? '' : 'S'} — VERIFIED LISTINGS
           </p>
           {filtered.length === 0 ? (
             <div className="mt-4 border border-line bg-white p-10 text-center">

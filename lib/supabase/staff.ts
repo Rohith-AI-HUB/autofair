@@ -47,6 +47,11 @@ export async function fetchStaffAssignments(): Promise<StaffAssignment[]> {
   return (body as { data: StaffAssignment[] }).data;
 }
 
+export interface VerifySectionInput {
+  title: string;
+  items: { name: string; result: 'pass' | 'attention' | 'fail'; note?: string }[];
+}
+
 export interface VerifyInput {
   vehicleId: string;
   score: number;
@@ -54,6 +59,12 @@ export interface VerifyInput {
   notes?: string;
   ratings?: Record<string, number | null>;
   price: number;
+  condition?: { mechanical?: string; exterior?: string; interior?: string; tyres?: string };
+  accidentStatus?: string;
+  accidentNote?: string;
+  docsStatus?: string;
+  docsNote?: string;
+  sections?: VerifySectionInput[];
 }
 
 /** Staff: complete verification. Backend owns the VERIFIED transition. */

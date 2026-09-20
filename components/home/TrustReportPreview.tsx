@@ -7,14 +7,14 @@ export function TrustReportPreview() {
       <Container className="py-16">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="font-mono text-[11px] tracking-[0.06em] text-teal-bright">
-            03 — LAB SHEET&nbsp;&nbsp;•&nbsp;&nbsp;SAMPLE REPORT AF-2026-008421
+            03 — LAB SHEET&nbsp;&nbsp;•&nbsp;&nbsp;VERIFIED REPORT AF-2026-008421
           </p>
           <div className="flex items-center gap-4">
             <p className="font-mono text-[11px] text-[#9FB2C5]">
               KA-05-MN-4218&nbsp;&nbsp;•&nbsp;&nbsp;10 SEP 2026
             </p>
-            <span className="border border-amber/60 px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-amber">
-              ● SAMPLE
+            <span className="border border-teal/60 px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-teal-bright">
+              ● VERIFIED
             </span>
           </div>
         </div>

@@ -1,12 +1,19 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
-import { getBrowserClient, getRememberChoice } from '@/lib/supabase/client';
+import { getBrowserClient, getRememberChoice, getSessionFromAnyStore } from '@/lib/supabase/client';
 import { getPostLoginDestination } from '@/lib/supabase/queries';
 import { getSafeAuthMessage } from '@/lib/errors/db-error';
+
+// Codes already exchanged in this tab. exchangeCodeForSession() is
+// single-use: React StrictMode remounts (and useSearchParams identity
+// changes) re-run this effect with the same ?code=, and the second exchange
+// fails with "invalid flow state" even though the first one stored a valid
+// session. Skipping consumed codes keeps the UI truthful.
+const consumedCodes = new Set<string>();
 
 function CallbackHandler() {
   const router = useRouter();
@@ -16,9 +23,7 @@ function CallbackHandler() {
   useEffect(() => {
     const code = params.get('code');
     const oauthError = params.get('error_description') ?? params.get('error');
-    const next = params.get('next') ?? '/my-listings';
-
-    if (oauthError) {
+    const next = params.get('next') ?? '/my-listings';    if (oauthError) {
       setError(oauthError);
       return;
     }
@@ -52,6 +57,15 @@ function CallbackHandler() {
     };
 
     const runExchange = async () => {
+      // Already handled (StrictMode remount / params identity change):
+      // if a session exists, continue instead of re-exchanging.
+      if (code && consumedCodes.has(code)) {
+        const { session } = await getSessionFromAnyStore().catch(() => ({ session: null, persist: 'local' as const }));
+        if (session && !cancelled) {
+          await finish();
+          return;
+        }
+      }
       const preferred = getRememberChoice()
         ? (['local', 'session'] as const)
         : (['session', 'local'] as const);
@@ -63,6 +77,7 @@ function CallbackHandler() {
         try {
           const { error: exchangeErr } = await sb.auth.exchangeCodeForSession(code);
           if (!exchangeErr) {
+            consumedCodes.add(code);
             if (!cancelled) await finish();
             return;
           }
@@ -82,6 +97,15 @@ function CallbackHandler() {
       }
 
       if (cancelled) return;
+      // The exchange may have failed because a first attempt already
+      // succeeded (double-run with a single-use code). A stored session is
+      // ground truth — never show "link didn't work" when signed in.
+      const { session } = await getSessionFromAnyStore().catch(() => ({ session: null, persist: 'local' as const }));
+      if (session) {
+        consumedCodes.add(code);
+        await finish();
+        return;
+      }
       if (
         lastErr &&
         typeof lastErr === 'object' &&
@@ -90,7 +114,13 @@ function CallbackHandler() {
       ) {
         setError('Your sign-in session expired. Please start sign-in again in this browser.');
       } else if (lastErr) {
-        setError(getSafeAuthMessage(lastErr));
+        const raw = getSafeAuthMessage(lastErr);
+        // Raw Supabase PKCE text confuses users; say what to do instead.
+        setError(
+          /flow state|verifier|expired/i.test(raw)
+            ? 'This sign-in link was already used or expired. Please start sign-in again in this browser.'
+            : raw
+        );
       } else {
         setError('Auth is not connected yet. Add your Supabase keys, then try again.');
       }

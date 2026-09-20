@@ -16,7 +16,7 @@ export function Footer() {
       <div className="mx-auto w-full max-w-[1440px] px-5 pb-7 pt-10 md:px-12">
         <div className="flex flex-col gap-2 border-b border-line-dark pb-7 md:flex-row md:items-center md:justify-between">
           <p className="font-mono text-[10px] tracking-[0.06em] text-teal-bright">
-            FILE CLOSE — END OF DOSSIER&nbsp;&nbsp;•&nbsp;&nbsp;SAMPLE DATA
+            FILE CLOSE — END OF DOSSIER
           </p>
           <p className="font-mono text-[10px] tracking-[0.04em] text-[#9FB2C5]">
             AF-2026-008421&nbsp;&nbsp;•&nbsp;&nbsp;10 SEP 2026&nbsp;&nbsp;14:32 IST
@@ -56,7 +56,7 @@ export function Footer() {
             <p className="font-mono text-[11px] tracking-[0.08em] text-teal-bright">TRUST</p>
             <ul className="mt-4 space-y-2.5 font-sans text-[13.5px] text-[#D6E2EC]">
               <li><Link className="hover:text-white" href="/inspection">Verification method</Link></li>
-              <li><Link className="hover:text-white" href="/cars/2022-hyundai-creta-sx">Sample report</Link></li>
+              <li><Link className="hover:text-white" href="/cars/2022-hyundai-creta-sx">Verified report</Link></li>
               <li><Link className="hover:text-white" href="/inspection">Document checks</Link></li>
               <li><Link className="hover:text-white" href="/contact">Contact support</Link></li>
             </ul>
@@ -65,10 +65,7 @@ export function Footer() {
 
         <div className="flex flex-col gap-2 border-t border-line-dark pt-5 md:flex-row md:items-center md:justify-between">
           <p className="font-sans text-[12px] text-[#5C738A]">
-            © 2026 AutoFair&nbsp;&nbsp;•&nbsp;&nbsp;Prototype with sample data&nbsp;&nbsp;•&nbsp;&nbsp;Instagram&nbsp;&nbsp;Facebook&nbsp;&nbsp;YouTube&nbsp;&nbsp;X&nbsp;&nbsp;Threads
-          </p>
-          <p className="font-mono text-[11px] text-[#5C738A]">
-            /&nbsp;&nbsp;/cars&nbsp;&nbsp;/inspection&nbsp;&nbsp;/how-it-works&nbsp;&nbsp;/about&nbsp;&nbsp;/contact
+            © 2026 AutoFair&nbsp;&nbsp;•Instagram&nbsp;&nbsp;Facebook&nbsp;&nbsp;YouTube&nbsp;&nbsp;X&nbsp;&nbsp;Threads
           </p>
         </div>
       </div>

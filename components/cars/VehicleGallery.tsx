@@ -20,14 +20,14 @@ export function VehicleGallery({
         <Image
           key={current}
           src={current}
-          alt={`${title} — sample photo ${active + 1}`}
+          alt={`${title} — photo ${active + 1}`}
           fill
           priority
           className="object-cover"
           sizes="(max-width: 1024px) 100vw, 60vw"
         />
         <p className="absolute left-4 top-4 bg-navy/80 px-2 py-1 font-mono text-[10px] text-white">
-          FIG. {String(active + 1).padStart(2, '0')} — SAMPLE PHOTO
+          FIG. {String(active + 1).padStart(2, '0')}
         </p>
       </div>
       {images.length > 1 && (

@@ -461,10 +461,16 @@ const LEAK_PATTERNS: RegExp[] = [
   /column\s+"?[a-z_]+"?\s+does not exist/i,
   /table\s+"?[a-z_]+"?/i,
   /constraint\s+"?[a-z_]+"?/i,
-  /vehicles?(_photos|_id)?/i,
+  // NOTE: no bare /vehicles?/ pattern here. It false-positives on plain
+  // English ("A vehicle with this registration number…") which IS the safe
+  // user-facing copy. Schema leaks are still caught by /vehicle_photos/,
+  // /vehicle_id/, /table/, SELECT/FROM and duplicate-key patterns above.
   /vehicle_photos/i,
   /profiles/i,
-  /listings/i,
+  // Quoted identifier only: bare "My Listings" is the app's own page name
+  // in safe copy ("…again from My Listings"), not a schema leak. Quoted
+  // "listings" in driver text is still caught, as is table "listings".
+  /["'`]listings["'`]/i,
   /inquiries/i,
   /inspections?(_sections|_items)?/i,
   /seller_id/i,

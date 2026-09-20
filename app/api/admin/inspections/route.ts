@@ -146,18 +146,28 @@ export async function POST(req: Request) {
     }
 
     const vid = (inserted as { id: string }).id;
-    // Backend auto-assign (DB trigger also fires; rpc is idempotent and guarantees assignment even if trigger was skipped).
-    let assigned: string | null = (inserted as { assigned_staff_id: string | null }).assigned_staff_id ?? null;
+    // Backend auto-assign: DB trigger vehicles_auto_assign fires on insert.
+    // Only call the rpc fallback when the trigger did not assign yet —
+    // otherwise trigger + rpc log the same creation twice in history.
+    let assigned: string | null = null;
     try {
-      const { data: pick, error: aErr } = await svc.rpc('assign_inspection_to_least_loaded', {
-        p_vehicle_id: vid,
-        p_assignment_type: 'Automatic',
-        p_reason: 'Auto-assigned on creation',
-        p_actor_id: ctx.userId,
-      });
-      if (!aErr && pick) assigned = pick as string;
+      const { data: fresh } = await svc.from('vehicles').select('assigned_staff_id').eq('id', vid).maybeSingle();
+      assigned = ((fresh as { assigned_staff_id: string | null } | null)?.assigned_staff_id ?? null) as string | null;
     } catch {
-      // Trigger already attempted assignment; leave as-is rather than failing creation.
+      assigned = (inserted as { assigned_staff_id: string | null }).assigned_staff_id ?? null;
+    }
+    if (!assigned) {
+      try {
+        const { data: pick, error: aErr } = await svc.rpc('assign_inspection_to_least_loaded', {
+          p_vehicle_id: vid,
+          p_assignment_type: 'Automatic',
+          p_reason: 'Auto-assigned on creation',
+          p_actor_id: ctx.userId,
+        });
+        if (!aErr && pick) assigned = pick as string;
+      } catch {
+        // Trigger already attempted assignment; leave as-is rather than failing creation.
+      }
     }
 
     let staffName: string | null = null;

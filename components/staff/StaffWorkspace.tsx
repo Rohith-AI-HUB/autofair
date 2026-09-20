@@ -10,6 +10,7 @@ import {
 } from '@/lib/supabase/staff';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
 import { addVehiclePhotoRows } from '@/lib/supabase/queries';
+import { verifiedInspection } from '@/lib/data/inspections';
 
 const RATING_FIELDS = [
   { key: 'exterior', label: 'Exterior /10' },
@@ -18,10 +19,29 @@ const RATING_FIELDS = [
   { key: 'tyres', label: 'Tyres /10' },
 ] as const;
 
+const CONDITION_OPTIONS = ['EXCELLENT', 'VERY GOOD', 'GOOD', 'AVERAGE', 'POOR'];
+const ACCIDENT_OPTIONS = ['CLEAR', 'MINOR REPAIR', 'MAJOR ACCIDENT'];
+const DOCS_OPTIONS = ['COMPLETE', '1 PENDING', '2+ PENDING'];
+
+type SectionDraft = {
+  id: string;
+  title: string;
+  items: { name: string; result: 'pass' | 'attention' | 'fail'; note: string }[];
+};
+
+function freshSections(): SectionDraft[] {
+  return verifiedInspection.map((c) => ({
+    id: c.id,
+    title: c.title,
+    items: c.items.map((i) => ({ name: i.name, result: i.result, note: '' })),
+  }));
+}
+
 /**
  * Single staff workspace (MVP). Assigned cars -> onsite info -> inspection
- * (score/status/notes + configurable ratings) -> price -> photo upload ->
- * Complete Verification (backend owns VERIFIED transition).
+ * (score/status/notes + configurable ratings + condition/accident/docs +
+ * per-check breakdown) -> price -> photo upload -> Complete Verification
+ * (backend owns VERIFIED transition + publishes the real Trust Report).
  */
 export function StaffWorkspace() {
   const [rows, setRows] = useState<StaffAssignment[] | null>(null);
@@ -31,6 +51,18 @@ export function StaffWorkspace() {
   const [overall, setOverall] = useState<'pass' | 'attention' | 'fail'>('attention');
   const [notes, setNotes] = useState('');
   const [ratings, setRatings] = useState<Record<string, string>>({});
+  const [condition, setCondition] = useState<Record<string, string>>({
+    mechanical: 'VERY GOOD',
+    exterior: 'GOOD',
+    interior: 'VERY GOOD',
+    tyres: 'GOOD',
+  });
+  const [accidentStatus, setAccidentStatus] = useState('CLEAR');
+  const [accidentNote, setAccidentNote] = useState('');
+  const [docsStatus, setDocsStatus] = useState('1 PENDING');
+  const [docsNote, setDocsNote] = useState('');
+  const [sections, setSections] = useState<SectionDraft[]>(() => freshSections());
+  const [openSection, setOpenSection] = useState<string | null>('tyres');
   const [price, setPrice] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -48,6 +80,26 @@ export function StaffWorkspace() {
   }, []);
 
   const selected = rows?.find((r) => r.vehicle.id === selectedId) ?? null;
+
+  function setItemResult(secId: string, itemName: string, result: 'pass' | 'attention' | 'fail') {
+    setSections((ss) =>
+      ss.map((s) =>
+        s.id === secId
+          ? { ...s, items: s.items.map((i) => (i.name === itemName ? { ...i, result } : i)) }
+          : s
+      )
+    );
+  }
+
+  function setItemNote(secId: string, itemName: string, note: string) {
+    setSections((ss) =>
+      ss.map((s) =>
+        s.id === secId
+          ? { ...s, items: s.items.map((i) => (i.name === itemName ? { ...i, note: note.slice(0, 300) } : i)) }
+          : s
+      )
+    );
+  }
 
   async function submit() {
     setFormError(null);
@@ -84,13 +136,28 @@ export function StaffWorkspace() {
         notes,
         ratings: parsedRatings,
         price: Math.round(p),
+        condition: {
+          mechanical: condition.mechanical,
+          exterior: condition.exterior,
+          interior: condition.interior,
+          tyres: condition.tyres,
+        },
+        accidentStatus,
+        accidentNote,
+        docsStatus,
+        docsNote,
+        sections: sections.map((sec) => ({
+          title: sec.title,
+          items: sec.items.map((i) => ({ name: i.name, result: i.result, note: i.note })),
+        })),
       });
-      setDone(`Verified. ${selected.vehicle.year} ${selected.vehicle.make} ${selected.vehicle.model} is now LIVE in /cars.`);
+      setDone(`Verified. ${selected.vehicle.year} ${selected.vehicle.make} ${selected.vehicle.model} is now LIVE in /cars with its real Trust Report.`);
       setRows((rs) => (rs ?? []).filter((r) => r.vehicle.id !== selected.vehicle.id));
       setSelectedId(null);
       setFiles([]);
+      setSections(freshSections());
     } catch (err) {
-      setFormError(getSafeErrorMessage(err, 'Could not complete verification. Please try again later.'));
+      setFormError(getSafeErrorMessage(err, 'Could not complete verification. If the breakdown did not save, run migration 0011_real_trust_report.sql in Supabase SQL Editor, then try again.'));
     } finally {
       setBusy(false);
     }
@@ -104,7 +171,7 @@ export function StaffWorkspace() {
       <h1 className="mt-2 font-sans text-[32px] font-extrabold text-navy">Assigned cars.</h1>
       <p className="mt-2 max-w-[620px] font-sans text-[14px] text-muted">
         Inspect onsite, record ratings and price, upload inspection photos, then complete
-        verification. Only verified cars appear in /cars.
+        verification. Only verified cars appear in /cars — with the Trust Report you enter below.
       </p>
 
       {loadError && (
@@ -200,6 +267,123 @@ export function StaffWorkspace() {
                     />
                   </label>
                 ))}
+              </div>
+
+              <div className="mt-4 border border-teal-line bg-teal-bg p-4">
+                <p className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">TRUST REPORT FIELDS — SHOWN TO BUYERS</p>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  {(['mechanical', 'exterior', 'interior', 'tyres'] as const).map((k) => (
+                    <label key={k} className="block">
+                      <span className="font-mono text-[10px] text-muted">{k.toUpperCase()} CONDITION</span>
+                      <select
+                        value={condition[k] ?? 'GOOD'}
+                        onChange={(e) => setCondition((c) => ({ ...c, [k]: e.target.value }))}
+                        className="mt-1.5 w-full border border-line bg-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
+                      >
+                        {CONDITION_OPTIONS.map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="font-mono text-[10px] text-muted">ACCIDENT HISTORY</span>
+                    <select
+                      value={accidentStatus}
+                      onChange={(e) => setAccidentStatus(e.target.value)}
+                      className="mt-1.5 w-full border border-line bg-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
+                    >
+                      {ACCIDENT_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="font-mono text-[10px] text-muted">DOCUMENTS</span>
+                    <select
+                      value={docsStatus}
+                      onChange={(e) => setDocsStatus(e.target.value)}
+                      className="mt-1.5 w-full border border-line bg-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
+                    >
+                      {DOCS_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="mt-4 block">
+                  <span className="font-mono text-[10px] text-muted">ACCIDENT NOTE (BUYER-VISIBLE)</span>
+                  <input
+                    value={accidentNote}
+                    onChange={(e) => setAccidentNote(e.target.value.slice(0, 500))}
+                    placeholder="e.g. Rear bumper repainted 2019, invoice on file."
+                    className="mt-1.5 w-full border border-line bg-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
+                  />
+                </label>
+                <label className="mt-4 block">
+                  <span className="font-mono text-[10px] text-muted">DOCUMENTS NOTE (BUYER-VISIBLE)</span>
+                  <input
+                    value={docsNote}
+                    onChange={(e) => setDocsNote(e.target.value.slice(0, 500))}
+                    placeholder="e.g. RC ✓ Insurance ✓ PUC ✓ Service ✓"
+                    className="mt-1.5 w-full border border-line bg-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 border border-line bg-off-white p-4">
+                <p className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">INSPECTION BREAKDOWN — PER CHECK</p>
+                <p className="mt-1 font-sans text-[12px] text-muted">Set each check to pass / attention / fail and add your note. This becomes the buyer-facing breakdown.</p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {sections.map((sec) => {
+                    const passed = sec.items.filter((i) => i.result === 'pass').length;
+                    const open = openSection === sec.id;
+                    return (
+                      <div key={sec.id} className="border border-line bg-white">
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          onClick={() => setOpenSection((v) => (v === sec.id ? null : sec.id))}
+                          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-off-white"
+                        >
+                          <span className="font-sans text-[13px] font-extrabold text-navy">{sec.title}</span>
+                          <span className="font-mono text-[11px] text-teal-dark">{passed} / {sec.items.length} {open ? '▾' : '›'}</span>
+                        </button>
+                        {open && (
+                          <div className="space-y-3 border-t border-line px-4 py-3">
+                            {sec.items.map((item) => (
+                              <div key={item.name} className="grid gap-2 border-b border-line/60 pb-3 last:border-0 last:pb-0 sm:grid-cols-[1fr_130px]">
+                                <div>
+                                  <p className="font-sans text-[13px] font-semibold text-navy">{item.name}</p>
+                                  <input
+                                    value={item.note}
+                                    onChange={(e) => setItemNote(sec.id, item.name, e.target.value)}
+                                    placeholder="Your note for the buyer…"
+                                    className="mt-1 w-full border border-line bg-off-white px-3 py-2 font-sans text-[12px] outline-none focus:border-teal"
+                                  />
+                                </div>
+                                <label className="block">
+                                  <span className="font-mono text-[9px] text-muted">RESULT</span>
+                                  <select
+                                    value={item.result}
+                                    onChange={(e) => setItemResult(sec.id, item.name, e.target.value as 'pass' | 'attention' | 'fail')}
+                                    className="mt-1 w-full border border-line bg-white px-3 py-2 font-sans text-[12px] outline-none focus:border-teal"
+                                  >
+                                    <option value="pass">✓ pass</option>
+                                    <option value="attention">⚠ attention</option>
+                                    <option value="fail">✕ fail</option>
+                                  </select>
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <label className="mt-4 block">

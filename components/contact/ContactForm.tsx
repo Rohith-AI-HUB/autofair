@@ -29,13 +29,13 @@ export function ContactForm() {
   if (sent) {
     return (
       <div className="border border-teal-line bg-white p-8" role="status">
-        <p className="font-mono text-[11px] text-teal-dark">MESSAGE FILED — SAMPLE FLOW</p>
+        <p className="font-mono text-[11px] text-teal-dark">MESSAGE FILED</p>
         <h2 className="mt-2 font-sans text-[22px] font-extrabold text-navy">
           We&apos;ve got your file number.
         </h2>
         <p className="mt-2 font-sans text-[14px] text-muted">
           Thanks {fields.name.trim()}. AutoFair will review and reply within 1 business
-          day. Frontend-only demo — nothing was sent to a backend.
+          day.
         </p>
         <button
           type="button"

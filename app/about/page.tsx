@@ -29,8 +29,8 @@ const principles = [
 const rules = [
   {
     n: '01',
-    t: 'Sample means sample',
-    d: 'Demos are labelled. Real files publish only after physical checks.',
+    t: 'Verified means verified',
+    d: 'Every file publishes only after physical checks.',
   },
   {
     n: '02',

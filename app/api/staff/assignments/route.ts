@@ -12,14 +12,33 @@ export async function GET(req: Request) {
     const ctx = await requireAuth(req);
     requireRoles(ctx, ['STAFF']);
 
-    const { data: vehicles, error: vErr } = await ctx.sb
-      .from('vehicles')
-      .select('*')
-      .or(`assigned_staff_id.eq.${ctx.userId},assigned_staff_id.is.null`)
-      .in('status', ['submitted', 'in_review', 'draft'])
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (vErr) throw vErr;
+    // Parameterized filters only — never interpolate IDs into `.or()` strings.
+    // (PostgREST `.or()` takes raw filter text, so a crafted ID could break out.)
+    const [mine, claimable] = await Promise.all([
+      ctx.sb
+        .from('vehicles')
+        .select('*')
+        .eq('assigned_staff_id', ctx.userId)
+        .in('status', ['submitted', 'in_review', 'draft'])
+        .order('created_at', { ascending: false })
+        .limit(25),
+      ctx.sb
+        .from('vehicles')
+        .select('*')
+        .is('assigned_staff_id', null)
+        .in('status', ['submitted', 'in_review', 'draft'])
+        .order('created_at', { ascending: false })
+        .limit(25),
+    ]);
+    if (mine.error) throw mine.error;
+    if (claimable.error) throw claimable.error;
+    const seen = new Set<string>();
+    const vehicles = [...(mine.data ?? []), ...(claimable.data ?? [])].filter((v) => {
+      const id = (v as { id?: string }).id;
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }).slice(0, 50);
 
     const out: Array<{ vehicle: unknown; listing: unknown; coverUrl: string | null }> = [];
     for (const v of ((vehicles ?? []) as Array<{ id: string }>)) {
