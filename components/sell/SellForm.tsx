@@ -454,7 +454,7 @@ export function SellForm() {
             label="WHATSAPP / MOBILE *"
             value={f.whatsapp}
             onChange={(v) => set('whatsapp', v)}
-            placeholder="96864 13636"
+            placeholder="91+"
             inputMode="tel"
             error={errors.whatsapp}
             className={textCls}

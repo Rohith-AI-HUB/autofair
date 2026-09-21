@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { getSessionFromAnyStore } from '@/lib/supabase/client';
+import { getBrowserClient, getSessionFromAnyStore } from '@/lib/supabase/client';
 import { openAuthModal } from '@/lib/auth/modal';
 import { cn } from '@/lib/utils';
 
@@ -36,15 +36,25 @@ export function SellerContact({
     setError(null);
     setState('loading');
     try {
-      const { session } = await getSessionFromAnyStore();
+      const { session, persist } = await getSessionFromAnyStore();
       if (!session) {
         setState('idle');
         openAuthModal({ mode: 'signin' });
         return;
       }
-      const res = await fetch(`/api/seller-contact?vehicleId=${encodeURIComponent(vehicleId)}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const call = (token: string) =>
+        fetch(`/api/seller-contact?vehicleId=${encodeURIComponent(vehicleId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      let res = await call(session.access_token);
+      if (res.status === 401) {
+        // A stored session outlives its short-lived access token whenever the
+        // tab slept or the timer refresh failed. Refresh once and retry before
+        // telling anyone to sign in again.
+        const sb = getBrowserClient(persist);
+        const { data } = (await sb?.auth.refreshSession()) ?? { data: null };
+        if (data?.session) res = await call(data.session.access_token);
+      }
       if (res.status === 401) {
         setState('idle');
         openAuthModal({ mode: 'signin' });

@@ -2,13 +2,16 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AppRole } from '@/lib/auth/roles';
 import { mapDbRoleToAppRole } from '@/lib/auth/roles';
 
-export interface AuthContext {
+export interface UserContext {
   userId: string;
   email: string | null;
-  role: AppRole;
-  dbRole: string | null;
   /** RLS-aware client acting as the caller (Bearer token forwarded). */
   sb: SupabaseClient;
+}
+
+export interface AuthContext extends UserContext {
+  role: AppRole;
+  dbRole: string | null;
 }
 
 function getEnv(): { url: string; anon: string } | null {
@@ -26,12 +29,11 @@ function bearerFrom(req: Request): string | null {
 }
 
 /**
- * Resolve the caller from `Authorization: Bearer <access_token>`.
- * Works with the current localStorage auth flow (client sends its session
- * token). Throws a safe {status, message} object on failure — routes turn
- * it into a production-safe payload via toSafeApiPayload.
+ * Resolve the caller from `Authorization: Bearer <access_token>` without
+ * requiring a provisioned profile. Use only for endpoints that provision or
+ * report account state; everything else needs `requireAuth`.
  */
-export async function requireAuth(req: Request): Promise<AuthContext> {
+export async function requireUser(req: Request): Promise<UserContext> {
   const env = getEnv();
   if (!env) {
     throw { status: 503, message: 'The service is temporarily unavailable. Please try again later.' };
@@ -49,21 +51,37 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
   if (error || !user) {
     throw { status: 401, message: 'Please sign in again to continue.' };
   }
-  const { data: profile, error: profileError } = await sb.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  return { userId: user.id, email: user.email ?? null, sb };
+}
+
+/**
+ * Same credential check as `requireUser`, plus the database-backed role.
+ * Throws a safe {status, message} object on failure — routes turn
+ * it into a production-safe payload via toSafeApiPayload.
+ */
+export async function requireAuth(req: Request): Promise<AuthContext> {
+  const ctx = await requireUser(req);
+  const { data: profile, error: profileError } = await ctx.sb
+    .from('profiles')
+    .select('role')
+    .eq('id', ctx.userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
   const dbRole = (profile as { role?: string | null } | null)?.role ?? null;
   const role = mapDbRoleToAppRole(dbRole);
-  if (profileError || !profile || !role) {
+  if (!profile || !role) {
     // A valid JWT alone is not sufficient for application authorization.
     // Privileged APIs must have a valid, database-backed application role.
-    throw { status: 401, message: 'Please sign in again to continue.' };
+    // This is deliberately not a 401: the credential is fine, so telling the
+    // client to sign in again can never fix it and traps the user in the
+    // sign-in modal. 403 PROFILE_MISSING means "account not provisioned".
+    throw {
+      status: 403,
+      code: 'PROFILE_MISSING',
+      message: "Your account isn't set up yet. Please sign out and sign back in.",
+    };
   }
-  return {
-    userId: user.id,
-    email: user.email ?? null,
-    role,
-    dbRole,
-    sb,
-  };
+  return { ...ctx, role, dbRole };
 }
 
 export function requireRoles(ctx: AuthContext, allowed: AppRole[]): void {

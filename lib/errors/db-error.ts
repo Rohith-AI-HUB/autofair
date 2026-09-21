@@ -244,6 +244,15 @@ export function classifyDbError(raw: unknown): SafeDbResult {
   ) {
     return { status: 401, code: 'UNAUTHORIZED', userMessage: SAFE_MESSAGES.UNAUTHORIZED };
   }
+  // server-auth throws plain {status, message} contexts. Without honouring the
+  // explicit status here they would classify as 500 in every route that does
+  // not special-case them.
+  if (parts.status === 401) {
+    return { status: 401, code: 'UNAUTHORIZED', userMessage: SAFE_MESSAGES.UNAUTHORIZED };
+  }
+  if (parts.status === 403 || code === 'PROFILE_MISSING') {
+    return { status: 403, code: 'FORBIDDEN', userMessage: SAFE_MESSAGES.FORBIDDEN };
+  }
   if (
     code === '42501' ||
     hay.includes('permission denied') ||

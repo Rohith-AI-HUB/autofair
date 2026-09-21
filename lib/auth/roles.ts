@@ -1,3 +1,4 @@
+import type { Session } from '@supabase/supabase-js';
 import { getBrowserClient, getSessionFromAnyStore } from '@/lib/supabase/client';
 import { logDbError } from '@/lib/errors/db-error';
 
@@ -87,6 +88,28 @@ export interface CurrentProfile {
 }
 
 /**
+ * Accounts created while signup provisioning was broken have an auth user but
+ * no profiles row, so every privileged API must reject them. The browser
+ * cannot insert past RLS, so provisioning is asked of the server; one attempt
+ * per user per page load keeps a still-broken account from looping.
+ */
+const provisioningAttempts = new Set<string>();
+
+async function provisionMissingProfile(session: Session): Promise<boolean> {
+  if (provisioningAttempts.has(session.user.id)) return false;
+  provisioningAttempts.add(session.user.id);
+  try {
+    const res = await fetch('/api/auth/ensure-profile', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Backend (DB) is source of truth for role. Reads profiles.role for the
  * current session user. Returns null when signed out / unconfigured.
  * Never throws raw DB errors to callers; logs and returns null.
@@ -100,22 +123,27 @@ export async function fetchCurrentProfile(): Promise<CurrentProfile | null> {
     // session-only login appear signed out.
     const { session, persist } = await getSessionFromAnyStore();
     const user = session?.user;
-    if (!user) return null;
+    if (!user || !session) return null;
     const sb = getBrowserClient(persist);
     if (!sb) return null;
-    const { data, error } = await sb.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
+    const readRole = () => sb.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
+    const { data, error } = await readRole();
     if (error) {
       logDbError('profiles.fetchRole', error);
       return null;
     }
-    if (!data) {
-      // No profile is an invalid application session (for example, an old
-      // browser session created before profile provisioning). It is not a
-      // database error, so do not feed `null` to the error logger and create
-      // a misleading 500 console event.
-      return null;
+    let row = (data as { id: string; role: string | null } | null) ?? null;
+    if (!row) {
+      // A missing profile is broken provisioning, not a signed-out user, so
+      // repair it and read again before giving up. It is not a database error,
+      // so do not feed `null` to the error logger and create a misleading 500
+      // console event.
+      if (await provisionMissingProfile(session)) {
+        const retry = await readRole();
+        if (retry.error) logDbError('profiles.fetchRole', retry.error);
+        row = (retry.data as { id: string; role: string | null } | null) ?? null;
+      }
     }
-    const row = data as { id: string; role: string | null } | null;
     const dbRole = row?.role ?? null;
     const role = mapDbRoleToAppRole(dbRole);
     if (!role) return null;

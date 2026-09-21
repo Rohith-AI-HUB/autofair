@@ -87,10 +87,12 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: { phone: displayPhone(phone), waLink, inspectionId: v.inspection_id } });
   } catch (err) {
-    const status = err && typeof err === 'object' && 'status' in (err as Record<string, unknown>) ? Number((err as { status: number }).status) : undefined;
+    const e = (err ?? {}) as { status?: unknown; message?: unknown; code?: unknown };
+    const status = typeof e.status === 'number' ? e.status : undefined;
     if (status === 401 || status === 403) {
-      const msg = err && typeof err === 'object' && 'message' in (err as Record<string, unknown>) ? String((err as { message: unknown }).message) : 'Something went wrong. Please try again later.';
-      return NextResponse.json({ error: { message: msg, code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN' } }, { status });
+      const msg = typeof e.message === 'string' ? e.message : 'Something went wrong. Please try again later.';
+      const code = typeof e.code === 'string' ? e.code : status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN';
+      return NextResponse.json({ error: { message: msg, code } }, { status });
     }
     const { status: s, body } = toSafeApiPayload('seller-contact', err);
     logDbError('seller-contact', err);
