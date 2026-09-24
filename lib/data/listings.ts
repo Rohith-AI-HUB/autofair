@@ -1,4 +1,4 @@
-export type ListingStatus = 'LIVE' | 'IN REVIEW' | 'DRAFT';
+export type ListingStatus = 'LIVE' | 'IN REVIEW' | 'DRAFT' | 'SOLD' | 'PAUSED';
 
 export interface SampleInquiry {
   who: string;

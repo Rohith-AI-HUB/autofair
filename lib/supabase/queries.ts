@@ -504,6 +504,65 @@ export async function deleteMyVehicle(vehicleId: string): Promise<void> {
   invalidateLiveCarsCache();
 }
 
+export type ListingAvailabilityAction = 'sold' | 'pause' | 'resume';
+
+// Mirrors the guard messages the 0017 RPC raises as P0001. Kept here so the
+// user sees why a transition was refused instead of a generic failure.
+const AVAILABILITY_CONFLICT: Record<ListingAvailabilityAction, string> = {
+  sold: 'Only a live or paused file can be marked as sold.',
+  pause: 'Only a live file can be paused.',
+  resume: 'Only a paused or sold file can be relisted.',
+};
+
+const AVAILABILITY_FAILED: Record<ListingAvailabilityAction, string> = {
+  sold: 'Could not mark this file as sold. Please try again.',
+  pause: 'Could not pause this file. Please try again.',
+  resume: 'Could not relist this file. Please try again.',
+};
+
+/**
+ * Seller-side availability change. The three row writes (vehicle, listing,
+ * buyer requests) happen atomically inside set_listing_availability, because a
+ * partial failure would leave a car publicly visible while staff treat it as
+ * done. Deliberately separate from updateMyVehicle, which must never accept a
+ * status field from the client.
+ */
+export async function setMyListingAvailability(
+  vehicleId: string,
+  action: ListingAvailabilityAction
+): Promise<void> {
+  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  if (!sb) {
+    throw new DbOperationError('listings.setAvailability', new Error('Supabase not configured'), {
+      status: 503,
+      code: 'UNAVAILABLE',
+      userMessage: SAFE_MESSAGES.UNAVAILABLE,
+      context: { vehicleId, action },
+    });
+  }
+  const { error } = await sb.rpc('set_listing_availability', {
+    p_vehicle_id: vehicleId,
+    p_action: action,
+  });
+  if (error) {
+    const classified = classifyDbError(error);
+    const rawCode = (error as { code?: unknown }).code;
+    throw new DbOperationError('listings.setAvailability', error, {
+      // 42501 (not the owner) and 401 are already mapped by classifyDbError;
+      // P0001 is the RPC's own transition guard, which would otherwise read
+      // as a generic 500.
+      ...(rawCode === 'P0001'
+        ? { status: 422 as const, code: 'VALIDATION' as const, userMessage: AVAILABILITY_CONFLICT[action] }
+        : classified.code === 'INTERNAL'
+          ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: AVAILABILITY_FAILED[action] }
+          : {}),
+      context: { vehicleId, action },
+    });
+  }
+  invalidateMyVehiclesCache();
+  invalidateLiveCarsCache();
+}
+
 // Post-login routing (trusted role first, never frontend-supplied).
 // ADMIN -> /admin, STAFF -> /staff, CUSTOMER -> /. Used by AuthForm (email)
 // and auth callback (Google). The role is read from profiles, never storage.

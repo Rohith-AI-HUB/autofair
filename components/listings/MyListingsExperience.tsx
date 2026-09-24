@@ -14,7 +14,9 @@ import {
   fetchVehiclePhotos,
   deleteVehiclePhotoRows,
   appendVehiclePhotoRows,
+  setMyListingAvailability,
   type InquiryRow,
+  type ListingAvailabilityAction,
   type MyVehicleRow,
 } from '@/lib/supabase/queries';
 import type { DbVehiclePhoto } from '@/lib/supabase/db-types';
@@ -30,8 +32,21 @@ function formatLakh(n: number): string {
 function mapRow(r: MyVehicleRow): Listing {
   const v = r.vehicle;
   const l = r.listing;
+  // listings.status owns SOLD / PAUSED / LIVE, vehicles.status owns the
+  // pre-listing review states. Listing is checked first so each state has
+  // exactly one authority.
   const status: ListingStatus =
-    l?.status === 'LIVE' ? 'LIVE' : v.status === 'draft' ? 'DRAFT' : v.status === 'submitted' || v.status === 'in_review' || v.status === 'verified' || l?.status === 'IN_REVIEW' ? 'IN REVIEW' : 'DRAFT';
+    l?.status === 'SOLD'
+      ? 'SOLD'
+      : l?.status === 'PAUSED'
+        ? 'PAUSED'
+        : l?.status === 'LIVE'
+          ? 'LIVE'
+          : v.status === 'draft'
+            ? 'DRAFT'
+            : v.status === 'submitted' || v.status === 'in_review' || v.status === 'verified' || l?.status === 'IN_REVIEW'
+              ? 'IN REVIEW'
+              : 'DRAFT';
   const title = `${v.year} ${v.make} ${v.model}${v.variant ? ` ${v.variant}` : ''}`;
   const priceNum = l?.price ?? v.price_expected;
   const price = formatLakh(priceNum);
@@ -46,23 +61,45 @@ function mapRow(r: MyVehicleRow): Listing {
     priceNum,
     createdAt,
     publishedAt,
-    priceLabel: status === 'LIVE' ? `VIEW INQUIRIES (${r.inquiriesCount}) →` : status === 'IN REVIEW' ? 'WHAT HAPPENS NEXT?' : 'EXPECTED PRICE',
+    priceLabel:
+      status === 'LIVE'
+        ? `VIEW INQUIRIES (${r.inquiriesCount}) →`
+        : status === 'IN REVIEW'
+          ? 'WHAT HAPPENS NEXT?'
+          : status === 'SOLD'
+            ? 'SOLD — HIDDEN FROM BUYERS'
+            : status === 'PAUSED'
+              ? 'PAUSED — HIDDEN FROM BUYERS'
+              : 'EXPECTED PRICE',
     spec: `${v.year}  •  ${v.fuel.toUpperCase()}  •  ${Math.round(v.km_driven / 1000)}K KM  •  ${v.reg_number}`,
     inspectionId: v.inspection_id,
     status,
     meta:
       status === 'LIVE'
         ? `✓ Verified  •  ${viewsNum} views  •  ${r.inquiriesCount} inquiries`
-        : status === 'IN REVIEW'
-          ? `◷ Pending Verification  •  ${v.inspection_id}`
-          : `○ Draft  •  ${v.inspection_id}`,
+        : status === 'SOLD'
+          ? `○ Sold  •  ${viewsNum} views  •  ${r.inquiriesCount} inquiries`
+          : status === 'PAUSED'
+            ? `◷ Paused  •  ${viewsNum} views`
+            : status === 'IN REVIEW'
+              ? `◷ Pending Verification  •  ${v.inspection_id}`
+              : `○ Draft  •  ${v.inspection_id}`,
     metaTone: status === 'LIVE' ? 'teal' : 'muted',
     views: `${viewsNum} views`,
     viewsNum,
     inquiries: r.inquiriesCount,
     image: r.coverUrl ?? '/icon.svg',
-    primaryAction: status === 'LIVE' ? 'Open file →' : status === 'IN REVIEW' ? 'Preview →' : 'Resume draft →',
-    secondaryAction: status === 'DRAFT' ? 'Delete' : 'Edit',
+    primaryAction:
+      status === 'LIVE'
+        ? 'Open file →'
+        : status === 'IN REVIEW'
+          ? 'Preview →'
+          : status === 'SOLD' || status === 'PAUSED'
+            ? 'Relist →'
+            : 'Resume draft →',
+    // A sold file is an ended file, so it becomes deletable; a live one stays
+    // staff-controlled (0017).
+    secondaryAction: status === 'DRAFT' || status === 'SOLD' ? 'Delete' : 'Edit',
     inquiriesSample: [],
   };
 }
@@ -83,6 +120,8 @@ const FILTERS: { key: Filter; label: (n: number) => string }[] = [
   { key: 'ALL', label: (n) => `All · ${n}` },
   { key: 'LIVE', label: (n) => `Live · ${n}` },
   { key: 'IN REVIEW', label: (n) => `In review · ${n}` },
+  { key: 'PAUSED', label: (n) => `Paused · ${n}` },
+  { key: 'SOLD', label: (n) => `Sold · ${n}` },
   { key: 'DRAFT', label: (n) => `Draft · ${n}` },
 ];
 
@@ -114,6 +153,8 @@ function StatusPill({ status }: { status: ListingStatus }) {
         'inline-flex items-center px-[10px] py-[5px] font-mono text-[10px] font-bold tracking-[0.04em]',
         status === 'LIVE' && 'bg-teal text-white',
         status === 'IN REVIEW' && 'bg-amber text-navy',
+        status === 'SOLD' && 'bg-navy text-white',
+        status === 'PAUSED' && 'border border-line bg-off-white text-muted',
         status === 'DRAFT' && 'border border-line bg-white text-muted'
       )}
     >
@@ -137,6 +178,9 @@ export function MyListingsExperience() {
   const [inqLoading, setInqLoading] = useState<string | null>(null);
   const [inqError, setInqError] = useState<Record<string, string>>({});
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [availError, setAvailError] = useState<string | null>(null);
+  const [availBusy, setAvailBusy] = useState<string | null>(null);
+  const [confirmSold, setConfirmSold] = useState<string | null>(null);
   const [showNextFor, setShowNextFor] = useState<string | null>(null);
   const [previewFor, setPreviewFor] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -249,6 +293,58 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
     }
     setRows((rs) => rs.filter((r) => r.id !== id));
     setConfirmDelete(null);
+  }
+
+  /**
+   * Sold / pause / relist. The row is re-derived through mapRow from the
+   * updated rawMap entry rather than patched directly, so card labels can
+   * never drift from what the fetch path would have rendered.
+   */
+  function applyAvailability(id: string, action: ListingAvailabilityAction) {
+    const cur = rawMap[id];
+    setAvailError(null);
+    setConfirmSold(null);
+    if (!cur) return;
+    setAvailBusy(id);
+    setMyListingAvailability(id, action)
+      .then(() => {
+        const next: MyVehicleRow = {
+          ...cur,
+          vehicle:
+            action === 'sold'
+              ? { ...cur.vehicle, status: 'sold' as const }
+              : action === 'resume' && cur.vehicle.status === 'sold'
+                ? { ...cur.vehicle, status: 'published' as const }
+                : cur.vehicle,
+          listing: cur.listing
+            ? {
+                ...cur.listing,
+                status:
+                  action === 'sold'
+                    ? ('SOLD' as const)
+                    : action === 'pause'
+                      ? ('PAUSED' as const)
+                      : ('LIVE' as const),
+              }
+            : cur.listing,
+        };
+        setRawMap((m) => ({ ...m, [id]: next }));
+        setRows((rs) => rs.map((r) => (r.id === id ? mapRow(next) : r)));
+        if (action === 'sold' && cur.listing?.id) {
+          // The RPC closes outstanding buyer requests, so any cached list for
+          // this file is now stale.
+          const lid = cur.listing.id;
+          setInquiriesById((m) => {
+            const nextMap = { ...m };
+            delete nextMap[lid];
+            return nextMap;
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        setAvailError(getSafeErrorMessage(err, 'Could not update this file. Please try again.'));
+      })
+      .finally(() => setAvailBusy(null));
   }
 
   async function loadInquiries(car: Listing) {
@@ -729,9 +825,9 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
         </label>
       </div>
 
-      {deleteError && (
+      {(deleteError || availError) && (
         <p role="alert" className="mt-4 border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">
-          {deleteError}
+          {deleteError ?? availError}
         </p>
       )}
 
@@ -889,6 +985,15 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
                     >
                       {previewFor === car.id ? 'Hide preview ↑' : `${car.primaryAction}`}
                     </button>
+                  ) : car.status === 'SOLD' || car.status === 'PAUSED' ? (
+                    <button
+                      type="button"
+                      disabled={availBusy === car.id}
+                      onClick={() => applyAvailability(car.id, 'resume')}
+                      className="bg-teal px-[18px] py-[10px] font-sans text-[13px] font-bold text-navy hover:bg-[#12a295] disabled:opacity-60"
+                    >
+                      {car.primaryAction}
+                    </button>
                   ) : (
                     <Link
                       href={`/sell-your-car?resume=${car.id}`}
@@ -898,6 +1003,54 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
                     </Link>
                   )}
                 </div>
+                {/* Demo seed cards have no DB row behind them, so availability
+                    changes are only offered for real files. */}
+                {!usingSample && (car.status === 'LIVE' || car.status === 'PAUSED') && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {confirmSold === car.id ? (
+                      <>
+                        <span className="font-sans text-[12px] font-semibold text-navy">
+                          Sold outside AutoFair?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => applyAvailability(car.id, 'sold')}
+                          className="bg-coral px-[14px] py-[8px] font-sans text-[12px] font-bold text-white hover:opacity-90"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmSold(null)}
+                          className="border border-navy/30 px-[14px] py-[8px] font-sans text-[12px] font-semibold text-navy"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled={availBusy === car.id}
+                          onClick={() => setConfirmSold(car.id)}
+                          className="border border-navy px-[14px] py-[8px] font-sans text-[12px] font-semibold text-navy hover:bg-off-white disabled:opacity-60"
+                        >
+                          Mark as sold
+                        </button>
+                        {car.status === 'LIVE' && (
+                          <button
+                            type="button"
+                            disabled={availBusy === car.id}
+                            onClick={() => applyAvailability(car.id, 'pause')}
+                            className="border border-navy/30 px-[14px] py-[8px] font-sans text-[12px] font-semibold text-muted hover:bg-off-white disabled:opacity-60"
+                          >
+                            Pause
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               {showNextFor === car.id && car.status === 'IN REVIEW' && (
                 <div className="border border-line bg-off-white p-4 sm:basis-full" role="status">
