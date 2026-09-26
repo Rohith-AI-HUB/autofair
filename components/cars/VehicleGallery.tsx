@@ -23,7 +23,7 @@ export function VehicleGallery({
           alt={`${title} — photo ${active + 1}`}
           fill
           priority
-          className="object-contain"
+          className="object-cover"
           sizes="(max-width: 1024px) 100vw, 60vw"
         />
         <p className="absolute left-4 top-4 bg-navy/80 px-2 py-1 font-mono text-[10px] text-white">
@@ -31,7 +31,7 @@ export function VehicleGallery({
         </p>
       </div>
       {images.length > 1 && (
-        <div className="mt-3 flex gap-3" role="tablist" aria-label="Vehicle photos">
+        <div className="mt-3 flex gap-3 overflow-x-auto pb-1" role="tablist" aria-label="Vehicle photos">
           {images.map((src, i) => (
             <button
               key={src + i}
@@ -40,7 +40,7 @@ export function VehicleGallery({
               aria-label={`View photo ${i + 1}`}
               onClick={() => setActive(i)}
               className={cn(
-                'relative h-[72px] w-[110px] overflow-hidden border-2 bg-off-white',
+                'relative h-[72px] w-[110px] shrink-0 overflow-hidden border-2 bg-navy',
                 active === i ? 'border-teal' : 'border-transparent opacity-70 hover:opacity-100'
               )}
             >
@@ -48,7 +48,7 @@ export function VehicleGallery({
                 src={src}
                 alt=""
                 fill
-                className="object-contain"
+                className="object-cover"
                 sizes="110px"
                 loading="lazy"
               />
