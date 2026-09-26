@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { notifyStaffAssigned } from '@/lib/notify';
 
 /**
  * Assign one newly submitted customer vehicle.
@@ -32,7 +33,12 @@ export async function POST(req: Request) {
     if (!row || row.seller_id !== ctx.userId) {
       return NextResponse.json({ error: { message: "You don't have permission to assign this vehicle.", code: 'FORBIDDEN' } }, { status: 403 });
     }
-    if (row.assigned_staff_id) return NextResponse.json({ data: { assigned: true, staffId: row.assigned_staff_id } });
+    if (row.assigned_staff_id) {
+      // The DB insert trigger already picked someone; this fallback call is
+      // the only place Next.js learns who — notify there.
+      await notifyStaffAssigned(vehicleId, row.assigned_staff_id);
+      return NextResponse.json({ data: { assigned: true, staffId: row.assigned_staff_id } });
+    }
 
     const svc = getServiceClient();
     if (!svc) {
@@ -45,6 +51,7 @@ export async function POST(req: Request) {
       p_actor_id: null,
     });
     if (assignmentError) throw assignmentError;
+    await notifyStaffAssigned(vehicleId, (staffId as string | null) ?? null);
     return NextResponse.json({ data: { assigned: Boolean(staffId), staffId: (staffId as string | null) ?? null } });
   } catch (err) {
     const status = err && typeof err === 'object' && 'status' in (err as Record<string, unknown>) ? Number((err as { status: number }).status) : undefined;

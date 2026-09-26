@@ -602,7 +602,7 @@ export function SellForm() {
                       className="relative h-24 w-32 shrink-0 overflow-hidden bg-off-white"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.url} alt={`Upload ${i + 1} — first photo is the cover`} className="h-full w-full object-cover" />
+                      <img src={p.url} alt={`Upload ${i + 1} — first photo is the cover`} className="h-full w-full object-contain" />
                       {i === 0 ? (
                         <span className="absolute left-2 top-2 bg-navy px-2 py-1 font-mono text-[8px] font-bold tracking-[0.06em] text-white">
                           COVER

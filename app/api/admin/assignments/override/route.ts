@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { notifyStaffAssigned } from '@/lib/notify';
 
 /**
  * POST /api/admin/assignments/override — manual override for exceptional cases (ADMIN only).
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
       throw mErr;
     }
 
+    await notifyStaffAssigned(vehicleId, (pick as string | null) ?? staffId);
     return NextResponse.json({ data: { vehicleId, staffId: pick } });
   } catch (err) {
     const status = err && typeof err === 'object' && 'status' in (err as Record<string, unknown>) ? Number((err as { status: number }).status) : undefined;

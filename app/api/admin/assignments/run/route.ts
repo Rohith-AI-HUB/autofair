@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { notifyStaffAssigned } from '@/lib/notify';
 
 /**
  * POST /api/admin/assignments/run — auto-assign every unassigned upcoming inspection (ADMIN only).
@@ -41,7 +42,10 @@ export async function POST(req: Request) {
         continue;
       }
       const sid = (pick as string | null) ?? null;
-      if (sid) assigned += 1;
+      if (sid) {
+        assigned += 1;
+        await notifyStaffAssigned(v.id, sid);
+      }
       details.push({ vehicleId: v.id, regNumber: v.reg_number, staffId: sid });
     }
 

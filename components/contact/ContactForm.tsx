@@ -9,6 +9,8 @@ export function ContactForm() {
   const [fields, setFields] = useState<Fields>({ name: '', email: '', inspectionId: '', message: '' });
   const [errors, setErrors] = useState<Errors>({});
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Prefill from dossier fallback: /contact?inspectionId=AF-...
   useEffect(() => {
@@ -71,7 +73,32 @@ export function ContactForm() {
         e.preventDefault();
         const v = validate();
         setErrors(v);
-        if (Object.keys(v).length === 0) setSent(true);
+        if (Object.keys(v).length !== 0 || submitting) return;
+        setSubmitting(true);
+        setSubmitError(null);
+        fetch('/api/inquiries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: fields.name.trim(),
+            email: fields.email.trim(),
+            inspectionId: fields.inspectionId.trim(),
+            message: fields.message.trim(),
+          }),
+        })
+          .then(async (res) => {
+            const json = (await res.json().catch(() => null)) as {
+              data?: { ok?: boolean };
+              error?: { message?: string };
+            } | null;
+            if (res.ok && json?.data?.ok) {
+              setSent(true);
+            } else {
+              setSubmitError(json?.error?.message ?? 'Something went wrong. Please try again.');
+            }
+          })
+          .catch(() => setSubmitError('Network error — please try again.'))
+          .finally(() => setSubmitting(false));
       }}
       className="border border-line bg-white p-6 md:p-8"
       aria-labelledby="contact-form-title"
@@ -127,13 +154,18 @@ export function ContactForm() {
         </Field>
         <button
           type="submit"
-          className="w-full bg-navy px-6 py-4 font-sans text-[14px] font-bold text-white hover:bg-navy-2"
+          disabled={submitting}
+          className="w-full bg-navy px-6 py-4 font-sans text-[14px] font-bold text-white hover:bg-navy-2 disabled:opacity-60"
         >
-          Send message&nbsp;&nbsp;→
+          {submitting ? 'Sending…' : 'Send message\u00a0\u00a0→'}
         </button>
+        {submitError && (
+          <p role="alert" className="font-sans text-[13px] font-semibold text-[#DC2626]">
+            {submitError}
+          </p>
+        )}
         <p className="font-mono text-[10px] leading-relaxed text-muted">
-          No spam. No financing or insurance pitches — verification queries only in this
-          prototype.
+          No spam. No financing or insurance pitches — verification queries only.
         </p>
       </div>
     </form>

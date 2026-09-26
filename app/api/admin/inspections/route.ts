@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { notifyStaffAssigned } from '@/lib/notify';
 
 const INSPECTION_STATUSES = ['Pending', 'Assigned', 'In Progress', 'Completed', 'Cancelled'] as const;
 
@@ -174,6 +175,7 @@ export async function POST(req: Request) {
     if (assigned) {
       const { data: s } = await ctx.sb.from('profiles').select('full_name').eq('id', assigned).maybeSingle();
       staffName = (s as { full_name: string | null } | null)?.full_name ?? null;
+      await notifyStaffAssigned(vid, assigned);
     }
 
     return NextResponse.json(

@@ -876,7 +876,7 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
                   src={car.image}
                   alt={`${car.title}`}
                   fill
-                  className="object-cover"
+                  className="object-contain"
                   sizes="(max-width: 640px) 100vw, 132px"
                   loading="lazy"
                 />
@@ -1078,7 +1078,7 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
                   </p>
                   <div className="mt-2 flex flex-col gap-3 sm:flex-row">
                     <div className="relative h-32 w-full shrink-0 overflow-hidden bg-white sm:w-[180px]">
-                      <Image src={car.image} alt={`${car.title} preview`} fill className="object-cover" sizes="180px" loading="lazy" />
+                      <Image src={car.image} alt={`${car.title} preview`} fill className="object-contain" sizes="180px" loading="lazy" />
                     </div>
                     <div>
                       <p className="font-sans text-[16px] font-extrabold text-navy">{car.title}</p>
@@ -1275,7 +1275,7 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
                             <img
                               src={p.public_url}
                               alt={`Existing photo ${i + 1}${isCover ? ' — cover' : ''}`}
-                              className={marked ? 'h-full w-full object-cover opacity-30 grayscale' : 'h-full w-full object-cover'}
+                              className={marked ? 'h-full w-full object-contain opacity-30 grayscale' : 'h-full w-full object-contain'}
                             />
                             {isCover && (
                               <span className="absolute left-2 top-2 bg-navy px-2 py-1 font-mono text-[8px] font-bold tracking-[0.06em] text-white">
@@ -1299,7 +1299,7 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
                       {editNewFiles.map((p, i) => (
                         <div key={p.id} className="relative h-24 w-32 shrink-0 overflow-hidden bg-off-white">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={p.url} alt={`New upload ${i + 1}`} className="h-full w-full object-cover" />
+                          <img src={p.url} alt={`New upload ${i + 1}`} className="h-full w-full object-contain" />
                           {editPhotos.filter((x) => !editDeleteIds.includes(x.id)).length === 0 && i === 0 && (
                             <span className="absolute left-2 top-2 bg-teal px-2 py-1 font-mono text-[8px] font-bold tracking-[0.06em] text-navy">
                               NEW COVER

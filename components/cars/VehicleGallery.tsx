@@ -23,7 +23,7 @@ export function VehicleGallery({
           alt={`${title} — photo ${active + 1}`}
           fill
           priority
-          className="object-cover"
+          className="object-contain"
           sizes="(max-width: 1024px) 100vw, 60vw"
         />
         <p className="absolute left-4 top-4 bg-navy/80 px-2 py-1 font-mono text-[10px] text-white">
@@ -40,7 +40,7 @@ export function VehicleGallery({
               aria-label={`View photo ${i + 1}`}
               onClick={() => setActive(i)}
               className={cn(
-                'relative h-[72px] w-[110px] overflow-hidden border-2',
+                'relative h-[72px] w-[110px] overflow-hidden border-2 bg-off-white',
                 active === i ? 'border-teal' : 'border-transparent opacity-70 hover:opacity-100'
               )}
             >
@@ -48,7 +48,7 @@ export function VehicleGallery({
                 src={src}
                 alt=""
                 fill
-                className="object-cover"
+                className="object-contain"
                 sizes="110px"
                 loading="lazy"
               />
