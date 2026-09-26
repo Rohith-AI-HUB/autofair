@@ -25,7 +25,7 @@ export function CarCard({
           src={car.images[0]}
           alt={`${carTitle(car)} — ${car.location}, verified photo`}
           fill
-          className="object-contain"
+          className="object-cover"
           sizes="(max-width: 640px) 100vw, 180px"
           loading="lazy"
         />

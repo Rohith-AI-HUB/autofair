@@ -59,7 +59,7 @@ export default async function CarDetailPage({
         </Link>
       </nav>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <VehicleGallery images={car.images} title={carTitle(car)} />
         <VehicleSummary car={car} />
       </div>
