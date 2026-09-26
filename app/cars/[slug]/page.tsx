@@ -10,6 +10,10 @@ import { ViewCounter } from '@/components/cars/ViewCounter';
 import { cars, getCarBySlug, carTitle } from '@/lib/data/cars';
 import { fetchCarBySlugFromDb, fetchLiveCars } from '@/lib/supabase/queries';
 
+// DB rows can change without a deploy (photos added later, price at
+// verification), so never serve the build-time snapshot indefinitely.
+export const revalidate = 60;
+
 export async function generateStaticParams() {
   return cars.map((c) => ({ slug: c.slug }));
 }
