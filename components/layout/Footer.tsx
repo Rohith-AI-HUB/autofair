@@ -58,7 +58,6 @@ export function Footer() {
               <li><Link className="hover:text-white" href="/inspection">Verification method</Link></li>
               <li><Link className="hover:text-white" href="/cars/2022-hyundai-creta-sx">Verified report</Link></li>
               <li><Link className="hover:text-white" href="/inspection">Document checks</Link></li>
-              <li><Link className="hover:text-white" href="/contact">Contact support</Link></li>
             </ul>
           </nav>
         </div>

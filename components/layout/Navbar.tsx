@@ -69,12 +69,6 @@ export function Navbar() {
                   >
                     My Listings
                   </Link>
-                  <Link
-                    href="/profile"
-                    className="font-sans text-[14px] font-medium text-navy hover:underline"
-                  >
-                    Profile
-                  </Link>
                 </>
               )}
             </>
@@ -151,13 +145,6 @@ export function Navbar() {
                       className="border-b border-line py-3 font-sans text-[15px] font-semibold text-navy"
                     >
                       My Listings
-                    </Link>
-                    <Link
-                      href="/profile"
-                      onClick={() => setOpen(false)}
-                      className="border-b border-line py-3 font-sans text-[15px] font-semibold text-navy"
-                    >
-                      Profile
                     </Link>
                   </>
                 )}

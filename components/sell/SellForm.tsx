@@ -10,7 +10,6 @@ import { uploadVehiclePhotos } from '@/lib/supabase/storage';
 import { isSupabaseConfigured, getBrowserClient } from '@/lib/supabase/client';
 import { DbOperationError, getSafeErrorMessage } from '@/lib/errors/db-error';
 import { openAuthModal } from '@/lib/auth/modal';
-import { normalizeIndianMobile } from '@/lib/validation/phone';
 
 type Fields = {
   reg: string;
@@ -22,7 +21,6 @@ type Fields = {
   km: string;
   location: string;
   price: string;
-  whatsapp: string;
 };
 
 const initial: Fields = {
@@ -35,7 +33,6 @@ const initial: Fields = {
   km: '',
   location: '',
   price: '',
-  whatsapp: '',
 };
 
 interface Photo {
@@ -104,7 +101,6 @@ export function SellForm() {
           km: String(row.vehicle.km_driven ?? ''),
           location: row.vehicle.location ?? '',
           price: String(row.listing?.price ?? row.vehicle.price_expected ?? ''),
-          whatsapp: f.whatsapp,
         });
         const sb = getBrowserClient('local') ?? getBrowserClient('session');
         if (sb) {
@@ -119,24 +115,6 @@ export function SellForm() {
     } catch {
       setEditLoading(false);
     }
-  }, []);
-
-  // Prefill saved WhatsApp so repeat sellers don't retype it.
-  useEffect(() => {
-    const sb = getBrowserClient('local') ?? getBrowserClient('session');
-    if (!sb) return;
-    sb.auth.getSession().then(({ data }) => {
-      const uid = data.session?.user?.id;
-      if (!uid) return;
-      sb.from('profiles').select('phone').eq('id', uid).maybeSingle().then(({ data: p }) => {
-        const phone = (p as { phone?: string | null } | null)?.phone;
-        if (phone) {
-          const digits = phone.replace(/\D/g, '');
-          const ten = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
-          setF((prev) => (prev.whatsapp ? prev : { ...prev, whatsapp: ten }));
-        }
-      });
-    });
   }, []);
 
   function set<K extends keyof Fields>(k: K, v: string) {
@@ -209,7 +187,6 @@ export function SellForm() {
     if (!f.km.trim()) e.km = 'Kilometres required.';
     else if (!/^\d+$/.test(f.km.replace(/,/g, ''))) e.km = 'Digits only.';
     if (!f.location.trim()) e.location = 'City is required.';
-    if (!normalizeIndianMobile(f.whatsapp)) e.whatsapp = 'Enter 10-digit mobile starting 6-9.';
     if (!f.price.trim()) e.price = 'Expected price required.';
     else if (!/^\d+$/.test(f.price.replace(/,/g, '').trim())) e.price = 'Digits only, e.g. 1240000.';
     // In edit/resume mode existing DB photos satisfy the requirement.
@@ -235,20 +212,6 @@ export function SellForm() {
       const year = Number(f.year.trim());
       const km = Number(f.km.replace(/,/g, '').trim());
       const priceExpected = Number(f.price.replace(/,/g, '').trim());
-      const whatsappE164 = normalizeIndianMobile(f.whatsapp);
-      async function saveContactPhone() {
-        try {
-          if (!whatsappE164) return;
-          const sb = getBrowserClient('local') ?? getBrowserClient('session');
-          if (!sb) return;
-          const { data } = await sb.auth.getSession();
-          const uid = data.session?.user?.id;
-          if (!uid) return;
-          await sb.from('profiles').update({ phone: whatsappE164 }).eq('id', uid);
-        } catch {
-          /* contact save is best-effort; vehicle submit already succeeded */
-        }
-      }
       // Edit / resume-draft: update the owner's row instead of inserting.
       if (editId) {
         await updateMyVehicle(editId, {
@@ -288,7 +251,6 @@ export function SellForm() {
         }
         invalidateMyVehiclesCache();
         invalidateLiveCarsCache();
-        await saveContactPhone();
         router.replace('/my-listings');
         router.refresh();
         return;
@@ -349,9 +311,7 @@ export function SellForm() {
         return;
       }
       invalidateMyVehiclesCache();
-      await saveContactPhone();
-      setInspectionId(newId);
-      setAssignmentStatus(autoAssigned ? 'assigned' : 'pending');
+      setInspectionId(newId);      setAssignmentStatus(autoAssigned ? 'assigned' : 'pending');
       setSavedToDb(true);
       setDone(true);
       // A completed customer submission belongs in the customer workspace.
@@ -446,24 +406,6 @@ export function SellForm() {
             error={errors.location}
             className={textCls}
           />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            id="sell-whatsapp"
-            label="WHATSAPP / MOBILE *"
-            value={f.whatsapp}
-            onChange={(v) => set('whatsapp', v)}
-            placeholder="91+"
-            inputMode="tel"
-            error={errors.whatsapp}
-            className={textCls}
-          />
-          <div className="flex items-end pb-1">
-            <p className="font-sans text-[12px] leading-relaxed text-muted">
-              10-digit mobile starting 6-9. Buyers see it after tapping Contact Seller.
-            </p>
-          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
