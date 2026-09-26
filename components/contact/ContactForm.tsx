@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/lib/auth/useAuth';
+import { getBrowserClient, getSessionFromAnyStore } from '@/lib/supabase/client';
 
 type Fields = { name: string; email: string; inspectionId: string; message: string };
 type Errors = Partial<Record<keyof Fields, string>>;
@@ -11,6 +13,28 @@ export function ContactForm() {
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { email: authEmail } = useAuth();
+
+  // Prefill for signed-in users: auth email + profile full name.
+  useEffect(() => {
+    if (authEmail) setFields((f) => (f.email ? f : { ...f, email: authEmail }));
+  }, [authEmail]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { session, persist } = await getSessionFromAnyStore();
+        const uid = session?.user.id;
+        const sb = uid ? getBrowserClient(persist) : null;
+        if (!sb) return;
+        const { data } = await sb.from('profiles').select('full_name').eq('id', uid).maybeSingle();
+        const name = (data as { full_name: string | null } | null)?.full_name?.trim();
+        if (name) setFields((f) => (f.name ? f : { ...f, name }));
+      } catch {
+        /* prefill is best-effort */
+      }
+    })();
+  }, []);
 
   // Prefill from dossier fallback: /contact?inspectionId=AF-...
   useEffect(() => {
@@ -56,7 +80,7 @@ export function ContactForm() {
           type="button"
           onClick={() => {
             setSent(false);
-            setFields({ name: '', email: '', inspectionId: '', message: '' });
+            setFields((f) => ({ name: f.name, email: f.email, inspectionId: '', message: '' }));
           }}
           className="mt-4 border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy"
         >

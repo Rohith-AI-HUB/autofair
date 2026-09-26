@@ -1,14 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { cars as seedCars } from '@/lib/data/cars';
 import type { Car } from '@/types';
 import { fetchLiveCars } from '@/lib/supabase/queries';
 import { CarCard } from '@/components/cars/CarCard';
 import { Container } from '@/components/shared/Container';
+import { cn } from '@/lib/utils';
 
 type SortKey = 'newest' | 'price-asc' | 'price-desc' | 'km-asc' | 'score-desc';
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'newest', label: 'Newest first' },
+  { key: 'price-asc', label: 'Price: low → high' },
+  { key: 'price-desc', label: 'Price: high → low' },
+  { key: 'km-asc', label: 'Lowest km' },
+  { key: 'score-desc', label: 'Highest score' },
+];
 
 const baseMakes = ['All', 'Hyundai', 'Maruti', 'Honda', 'Tata', 'Kia'];
 const fuels = ['All', 'Petrol', 'Diesel', 'CNG', 'Electric', 'Hybrid'];
@@ -97,7 +106,6 @@ export function CarsExplorer() {
   const [priceIdx, setPriceIdx] = useState(0);
   const [yearIdx, setYearIdx] = useState(0);
   const [sort, setSort] = useState<SortKey>('newest');
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -135,62 +143,40 @@ export function CarsExplorer() {
     return list;
   }, [cars, query, make, fuel, gear, city, priceIdx, yearIdx, sort]);
 
-  const filterPanel = (
-    <div className="flex flex-col gap-5">
-      <FilterGroup label="Make">
-        <div className="flex flex-wrap gap-2">
-          {makes.map((m) => (
-            <FilterPill key={m} active={make === m} onClick={() => setMake(m)}>
-              {m}
-            </FilterPill>
-          ))}
-        </div>
-      </FilterGroup>
-      <FilterGroup label="Fuel">
-        <div className="flex flex-wrap gap-2">
-          {fuels.map((f) => (
-            <FilterPill key={f} active={fuel === f} onClick={() => setFuel(f)}>
-              {f}
-            </FilterPill>
-          ))}
-        </div>
-      </FilterGroup>
-      <FilterGroup label="Transmission">
-        <div className="flex flex-wrap gap-2">
-          {transmissions.map((t) => (
-            <FilterPill key={t} active={gear === t} onClick={() => setGear(t)}>
-              {t}
-            </FilterPill>
-          ))}
-        </div>
-      </FilterGroup>
-      <FilterGroup label="City">
-        <div className="flex flex-wrap gap-2">
-          {cities.map((c) => (
-            <FilterPill key={c} active={city === c} onClick={() => setCity(c)}>
-              {c}
-            </FilterPill>
-          ))}
-        </div>
-      </FilterGroup>
-      <FilterGroup label="Price">
-        <div className="flex flex-wrap gap-2">
-          {priceBands.map((p, i) => (
-            <FilterPill key={p.label} active={priceIdx === i} onClick={() => setPriceIdx(i)}>
-              {p.label}
-            </FilterPill>
-          ))}
-        </div>
-      </FilterGroup>
-      <FilterGroup label="Year">
-        <div className="flex flex-wrap gap-2">
-          {yearBands.map((y, i) => (
-            <FilterPill key={y.label} active={yearIdx === i} onClick={() => setYearIdx(i)}>
-              {y.label}
-            </FilterPill>
-          ))}
-        </div>
-      </FilterGroup>
+  const filterBar = (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border border-line bg-white p-5">
+      <FilterDropdown label="Make" options={makes} value={make} onChange={setMake} />
+      <FilterDropdown label="Fuel" options={fuels} value={fuel} onChange={setFuel} />
+      <FilterDropdown label="Transmission" options={transmissions} value={gear} onChange={setGear} />
+      <FilterDropdown label="City" options={cities} value={city} onChange={setCity} />
+      <FilterDropdown
+        label="Price"
+        options={priceBands.map((p) => p.label)}
+        value={priceBands[priceIdx].label}
+        defaultLabel={priceBands[0].label}
+        onChange={(l) => setPriceIdx(Math.max(0, priceBands.findIndex((p) => p.label === l)))}
+      />
+      <FilterDropdown
+        label="Year"
+        options={yearBands.map((y) => y.label)}
+        value={yearBands[yearIdx].label}
+        defaultLabel={yearBands[0].label}
+        onChange={(l) => setYearIdx(Math.max(0, yearBands.findIndex((y) => y.label === l)))}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          setMake('All');
+          setFuel('All');
+          setGear('All');
+          setCity('All');
+          setPriceIdx(0);
+          setYearIdx(0);
+        }}
+        className="shrink-0 whitespace-nowrap border border-navy/30 bg-white px-5 py-2 font-sans text-[12.5px] font-bold text-navy hover:border-navy"
+      >
+        Reset
+      </button>
     </div>
   );
 
@@ -226,40 +212,20 @@ export function CarsExplorer() {
           )}
         </label>
         <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
-            aria-expanded={filtersOpen}
-            className="inline-flex items-center gap-2 border border-navy/30 px-5 py-3 font-sans text-[13px] font-bold text-navy lg:hidden"
-          >
-            <SlidersHorizontal size={16} />
-            Filters
-          </button>
-          <label className="inline-flex items-center gap-2 border border-line bg-white px-4 py-3">
-            <span className="font-mono text-[11px] text-muted">SORT</span>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="bg-transparent font-sans text-[13px] font-semibold text-navy outline-none"
-              aria-label="Sort vehicles"
-            >
-              <option value="newest">Newest first</option>
-              <option value="price-asc">Price: low → high</option>
-              <option value="price-desc">Price: high → low</option>
-              <option value="km-asc">Lowest km</option>
-              <option value="score-desc">Highest score</option>
-            </select>
-          </label>
+          <FilterDropdown
+            label="Sort"
+            options={SORT_OPTIONS.map((o) => o.label)}
+            value={SORT_OPTIONS.find((o) => o.key === sort)!.label}
+            defaultLabel={SORT_OPTIONS[0].label}
+            onChange={(l) => setSort(SORT_OPTIONS.find((o) => o.label === l)!.key)}
+            rootClassName="shrink-0"
+          />
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
-        <aside className="hidden lg:block">
-          <div className="sticky top-32 border border-line bg-white p-5">{filterPanel}</div>
-        </aside>
-        {filtersOpen && (
-          <div className="border border-line bg-white p-5 lg:hidden">{filterPanel}</div>
-        )}
+      {filterBar}
+
+      <div className="mt-8">
         <div>
           <p className="font-mono text-[11px] text-muted" role="status" aria-live="polite">
             {filtered.length} FILE{filtered.length === 1 ? '' : 'S'} — VERIFIED LISTINGS
@@ -299,36 +265,107 @@ export function CarsExplorer() {
   );
 }
 
-function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted">{label.toUpperCase()}</p>
-      <div className="mt-2">{children}</div>
-    </div>
-  );
-}
-
-function FilterPill({
-  active,
-  onClick,
-  children,
+function FilterDropdown({
+  label,
+  options,
+  value,
+  onChange,
+  defaultLabel = 'All',
+  rootClassName,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  defaultLabel?: string;
+  rootClassName?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const isDefault = value === defaultLabel;
+  const listId = `filter-list-${label.toLowerCase()}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={
-        active
-          ? 'bg-navy px-3 py-2 font-sans text-[12.5px] font-bold text-white'
-          : 'border border-line bg-off-white px-3 py-2 font-sans text-[12.5px] font-semibold text-navy hover:border-navy'
-      }
-    >
-      {children}
-    </button>
+    <div ref={wrapRef} className={cn('relative shrink-0', rootClassName)}>
+      <div
+        className={cn(
+          'flex h-full w-full items-center gap-2 whitespace-nowrap border bg-white px-3.5 py-2',
+          open ? 'border-teal' : isDefault ? 'border-line' : 'border-navy'
+        )}
+      >
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          onClick={() => setOpen((v) => !v)}
+          className="flex flex-1 items-center justify-between gap-3 font-sans text-[12.5px]"
+        >
+          <span className="border-r border-navy/20 pr-2.5 font-mono text-[10px] tracking-[0.08em] text-muted">
+            {label.toUpperCase()}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className={cn('font-bold', isDefault ? 'text-navy' : 'text-teal-dark')}>{value}</span>
+            <ChevronDown size={14} className={cn('text-muted transition-transform', open && 'rotate-180')} aria-hidden />
+          </span>
+        </button>
+        {!isDefault && (
+          <button
+            type="button"
+            aria-label={`Clear ${label} filter`}
+            onClick={() => onChange(defaultLabel)}
+            className="text-muted hover:text-navy"
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={`${label} filter options`}
+          className="absolute left-0 top-[calc(100%+8px)] z-30 max-h-72 w-52 overflow-y-auto border border-line bg-white py-1 shadow-[0_8px_24px_rgba(11,27,46,0.14)]"
+        >
+          {options.map((opt) => {
+            const selected = opt === value;
+            return (
+              <li key={opt} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-center justify-between px-4 py-2.5 text-left font-sans text-[13px]',
+                    selected ? 'font-bold text-teal-dark' : 'font-semibold text-navy hover:bg-off-white'
+                  )}
+                >
+                  {opt}
+                  {selected && <Check size={14} aria-hidden />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

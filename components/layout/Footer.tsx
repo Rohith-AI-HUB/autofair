@@ -14,23 +14,11 @@ export function Footer() {
   return (
     <footer className="bg-navy text-white">
       <div className="mx-auto w-full max-w-[1440px] px-5 pb-7 pt-10 md:px-12">
-        <div className="flex flex-col gap-2 border-b border-line-dark pb-7 md:flex-row md:items-center md:justify-between">
-          <p className="font-mono text-[10px] tracking-[0.06em] text-teal-bright">
-            FILE CLOSE — END OF DOSSIER
-          </p>
-          <p className="font-mono text-[10px] tracking-[0.04em] text-[#9FB2C5]">
-            AF-2026-008421&nbsp;&nbsp;•&nbsp;&nbsp;10 SEP 2026&nbsp;&nbsp;14:32 IST
-          </p>
-        </div>
-
         <div className="grid grid-cols-2 gap-8 py-8 md:grid-cols-4">
           <div className="col-span-2 md:col-span-1">
             <Logo variant="dark" />
             <p className="mt-4 max-w-[260px] font-sans text-[13px] leading-relaxed text-[#9FB2C5]">
               Verified cars. Honest history. Fair deals.
-            </p>
-            <p className="mt-3 font-mono text-[11px] leading-relaxed text-[#5C738A]">
-              Inspection IDs • Report IDs • Timestamps in IBM Plex Mono
             </p>
           </div>
 
@@ -64,7 +52,7 @@ export function Footer() {
 
         <div className="flex flex-col gap-2 border-t border-line-dark pt-5 md:flex-row md:items-center md:justify-between">
           <p className="font-sans text-[12px] text-[#5C738A]">
-            © 2026 AutoFair&nbsp;&nbsp;•Instagram&nbsp;&nbsp;Facebook&nbsp;&nbsp;YouTube&nbsp;&nbsp;X&nbsp;&nbsp;Threads
+            © 2026 AutoFair.online&nbsp;&nbsp;
           </p>
         </div>
       </div>
