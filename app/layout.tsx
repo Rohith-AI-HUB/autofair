@@ -6,6 +6,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { AuthModalHost } from '@/components/auth/AuthModalHost';
 import { RoleRouteGate } from '@/components/auth/RoleRouteGate';
+import { Analytics } from "@vercel/analytics/next";
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Footer />
         </RoleRouteGate>
         <AuthModalHost />
+        <Analytics />
       </body>
     </html>
   );

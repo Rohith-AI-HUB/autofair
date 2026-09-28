@@ -57,10 +57,12 @@ export function isAdminAppRole(role: AppRole | null | undefined): boolean {
 
 export type TrustedRole = AppRole;
 
-export function getRoleHome(role: AppRole | null | undefined): '/' | '/admin' | '/staff' {
+export function getRoleHome(
+  role: AppRole | null | undefined
+): '/cars' | '/admin' | '/staff' {
   if (role === 'ADMIN') return '/admin';
   if (role === 'STAFF') return '/staff';
-  return '/';
+  return '/cars';
 }
 
 export function isPathAllowedForRole(path: string, role: AppRole | null | undefined): boolean {

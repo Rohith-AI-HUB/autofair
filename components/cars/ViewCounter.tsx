@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { getBrowserClient } from '@/lib/supabase/client';
+import { getAuthedBrowserClient } from '@/lib/supabase/client';
 
 // Fire-and-forget view counter so garage TOTAL VIEWS is real.
 // Looks up the LIVE listing by slug, then calls the security-definer
@@ -11,7 +11,7 @@ export function ViewCounter({ slug }: { slug: string }) {
     let cancelled = false;
     (async () => {
       try {
-        const sb = getBrowserClient('local') ?? getBrowserClient('session');
+        const sb = await getAuthedBrowserClient();
         if (!sb) return;
         const { data: listing } = await sb.from('listings').select('id').eq('slug', slug).maybeSingle();
         const id = (listing as { id: string } | null)?.id;

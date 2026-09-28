@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
-import { getBrowserClient } from '@/lib/supabase/client';
+import { getAuthedBrowserClient } from '@/lib/supabase/client';
 import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
 import { isStrongStaffPassword, STAFF_PASSWORD_MESSAGE } from '@/lib/auth/password-policy';
 
@@ -21,7 +21,7 @@ export default function UpdatePasswordPage() {
       setError(STAFF_PASSWORD_MESSAGE);
       return;
     }
-    const sb = getBrowserClient('local');
+    const sb = await getAuthedBrowserClient();
     if (!sb) {
       setError('Auth is not connected yet.');
       return;

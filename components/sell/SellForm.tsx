@@ -7,7 +7,7 @@ import { Container } from '@/components/shared/Container';
 import { cn } from '@/lib/utils';
 import { createVehicleRow, addVehiclePhotoRows, invalidateMyVehiclesCache, invalidateLiveCarsCache, fetchMyVehicleById, fetchMyVehicleByReg, updateMyVehicle } from '@/lib/supabase/queries';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
-import { isSupabaseConfigured, getBrowserClient } from '@/lib/supabase/client';
+import { isSupabaseConfigured, getAuthedBrowserClient } from '@/lib/supabase/client';
 import { DbOperationError, getSafeErrorMessage } from '@/lib/errors/db-error';
 import { openAuthModal } from '@/lib/auth/modal';
 
@@ -87,7 +87,7 @@ export function SellForm() {
       const id = q.get('resume') || q.get('vehicleId');
       if (!id) return;
       setEditLoading(true);
-      fetchMyVehicleById(id).then((row) => {
+      fetchMyVehicleById(id).then(async (row) => {
         setEditLoading(false);
         if (!row) return;
         setEditId(row.vehicle.id);
@@ -102,7 +102,7 @@ export function SellForm() {
           location: row.vehicle.location ?? '',
           price: String(row.listing?.price ?? row.vehicle.price_expected ?? ''),
         });
-        const sb = getBrowserClient('local') ?? getBrowserClient('session');
+        const sb = await getAuthedBrowserClient();
         if (sb) {
           sb.from('vehicle_photos')
             .select('id', { count: 'exact', head: true })

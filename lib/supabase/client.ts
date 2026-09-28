@@ -90,6 +90,25 @@ export async function getSessionFromAnyStore(): Promise<{
   }
 }
 
+/**
+ * The one browser client to use for anything that needs the signed-in user.
+ *
+ * `getBrowserClient('local') ?? getBrowserClient('session')` never reached the
+ * right-hand side: the left is only null when Supabase is unconfigured or on the
+ * server. So a session that lives in sessionStorage — "Keep me signed in"
+ * unchecked, or an OAuth callback that stored it there — was invisible to every
+ * data call while getSessionFromAnyStore() (which does read both stores) still
+ * showed the user as signed in in the header.
+ *
+ * Returns null only for "not configured / server", so existing guards keep
+ * working. Signed out, it returns the localStorage client as before.
+ */
+export async function getAuthedBrowserClient(): Promise<SupabaseClient | null> {
+  if (!isSupabaseConfigured() || typeof window === 'undefined') return null;
+  const { session, persist } = await getSessionFromAnyStore();
+  return getBrowserClient(session ? persist : 'local');
+}
+
 export function getSiteUrl(): string {
   if (typeof window !== 'undefined') return window.location.origin;
   return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';

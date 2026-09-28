@@ -1,8 +1,8 @@
 import type { Car } from '@/types';
 import type { DbInspection, DbInspectionItem, DbInspectionSection, DbListing, DbVehicle, DbVehiclePhoto } from '@/lib/supabase/db-types';
 import { getServerClient } from '@/lib/supabase/server';
-import { getBrowserClient } from '@/lib/supabase/client';
-import { fetchCurrentProfile } from '@/lib/auth/roles';
+import { getAuthedBrowserClient } from '@/lib/supabase/client';
+import { fetchCurrentProfile, getRoleHome } from '@/lib/auth/roles';
 import {
   DbOperationError,
   SAFE_MESSAGES,
@@ -206,7 +206,7 @@ export interface InquiryRow {
 }
 
 export async function fetchMyInquiries(listingId: string): Promise<InquiryRow[]> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('inquiries.fetchMine', new Error('Supabase not configured'), {
       status: 503,
@@ -247,7 +247,7 @@ export interface UpdateVehiclePatch {
 }
 
 export async function fetchMyVehicleById(vehicleId: string): Promise<MyVehicleRow | null> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb || typeof window === 'undefined') return null;
   try {
     const { data: sessionData } = await sb.auth.getSession();
@@ -279,7 +279,7 @@ export async function fetchMyVehicleById(vehicleId: string): Promise<MyVehicleRo
 }
 
 export async function updateMyVehicle(vehicleId: string, patch: UpdateVehiclePatch): Promise<void> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('vehicles.update', new Error('Supabase not configured'), {
       status: 503,
@@ -402,7 +402,7 @@ let myMem: { at: number; rows: MyVehicleRow[] } | null = null;
 
 async function refreshMyVehicles(): Promise<MyVehicleRow[] | null> {
   try {
-    const sb = getBrowserClient('local') ?? getBrowserClient('session');
+    const sb = await getAuthedBrowserClient();
     if (!sb || typeof window === 'undefined') return null;
     const { data: sessionData } = await sb.auth.getSession();
     const uid = sessionData.session?.user?.id;
@@ -464,7 +464,7 @@ export function invalidateMyVehiclesCache(): void {
 }
 
 export async function deleteMyVehicle(vehicleId: string): Promise<void> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('vehicles.delete', new Error('Supabase not configured'), {
       status: 503,
@@ -531,7 +531,7 @@ export async function setMyListingAvailability(
   vehicleId: string,
   action: ListingAvailabilityAction
 ): Promise<void> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('listings.setAvailability', new Error('Supabase not configured'), {
       status: 503,
@@ -563,20 +563,18 @@ export async function setMyListingAvailability(
   invalidateLiveCarsCache();
 }
 
-// Post-login routing (trusted role first, never frontend-supplied).
-// ADMIN -> /admin, STAFF -> /staff, CUSTOMER -> /. Used by AuthForm (email)
-// and auth callback (Google). The role is read from profiles, never storage.
-export async function getPostLoginDestination(): Promise<'/' | '/admin' | '/staff'> {
+// Post-login routing (trusted role first, never frontend-supplied). Delegates
+// to getRoleHome so the role→route map exists in exactly one place. The role is
+// read from profiles, never storage.
+export async function getPostLoginDestination(): Promise<ReturnType<typeof getRoleHome>> {
   try {
     // fetchCurrentProfile reads profiles.role from the backend. A missing or
     // invalid profile is not promoted to any internal role.
     const profile = await fetchCurrentProfile().catch(() => null);
-    if (profile?.role === 'ADMIN') return '/admin';
-    if (profile?.role === 'STAFF') return '/staff';
-    return '/';
+    return getRoleHome(profile?.role);
   } catch (err) {
     logDbError('vehicles.countMine', err);
-    return '/';
+    return getRoleHome(null);
   }
 }
 
@@ -679,7 +677,7 @@ export interface SellInput {
 export async function createVehicleRow(
   input: SellInput
 ): Promise<{ vehicleId: string; inspectionId: string; autoAssigned: boolean }> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('vehicles.create', new Error('Supabase not configured'), {
       status: 503,
@@ -807,7 +805,7 @@ export async function createVehicleRow(
  * resume instead of showing "already exists".
  */
 export async function fetchMyVehicleByReg(reg: string): Promise<{ vehicleId: string; inspectionId: string } | null> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb || typeof window === 'undefined') return null;
   try {
     const { data: sessionData } = await sb.auth.getSession();
@@ -833,7 +831,7 @@ export async function addVehiclePhotoRows(  vehicleId: string,
   uploaded: { storagePath: string; publicUrl: string }[]
 ): Promise<void> {
   if (!uploaded.length) return;
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('vehicle_photos.insert', new Error('Supabase not configured'), {
       status: 503,
@@ -875,7 +873,7 @@ export async function createVehicleWithPhotos(
 // Display order is sort_order (cover = smallest). Uses only INSERT + DELETE
 // (no UPDATE) so existing owner RLS policies apply.
 export async function fetchVehiclePhotos(vehicleId: string): Promise<DbVehiclePhoto[]> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb || typeof window === 'undefined') return [];
   try {
     const { data, error } = await sb
@@ -899,7 +897,7 @@ export async function appendVehiclePhotoRows(
   uploaded: { storagePath: string; publicUrl: string }[]
 ): Promise<void> {
   if (!uploaded.length) return;
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('vehicle_photos.insert', new Error('Supabase not configured'), {
       status: 503,
@@ -952,7 +950,7 @@ export async function deleteVehiclePhotoRows(
   photos: { id: string; storage_path: string }[]
 ): Promise<void> {
   if (!photos.length) return;
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('vehicle_photos.delete', new Error('Supabase not configured'), {
       status: 503,

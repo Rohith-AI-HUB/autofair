@@ -3,7 +3,7 @@
 // 0-rupee image pipeline: resize in browser → WebP → upload to Supabase Storage.
 // Keeps Supabase Free 1GB / 5GB egress alive: ~150-200KB per photo, 10 photos ≈ 2MB per car.
 
-import { getBrowserClient } from '@/lib/supabase/client';
+import { getAuthedBrowserClient } from '@/lib/supabase/client';
 import { DbOperationError, SAFE_MESSAGES, classifyDbError } from '@/lib/errors/db-error';
 
 export const PHOTO_BUCKET = 'vehicle-photos';
@@ -44,7 +44,7 @@ export async function uploadVehiclePhotos(
   vehicleId: string,
   files: File[]
 ): Promise<{ storagePath: string; publicUrl: string }[]> {
-  const sb = getBrowserClient('local') ?? getBrowserClient('session');
+  const sb = await getAuthedBrowserClient();
   if (!sb) {
     throw new DbOperationError('storage.upload', new Error('Supabase not configured'), {
       status: 503,
