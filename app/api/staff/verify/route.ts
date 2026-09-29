@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { carTitle } from '@/lib/data/car-names';
 
 const OVERALL = new Set(['pass', 'attention', 'fail']);
 
@@ -265,7 +266,7 @@ export async function POST(req: Request) {
 
     // Publish listing at staff-decided price (create if missing).
     const full = (await ctx.sb.from('vehicles').select('*').eq('id', vehicleId).maybeSingle()).data as
-      | { year: number; make: string; model: string; reg_number: string }
+      | { year: number; make: string; model: string; variant: string; reg_number: string }
       | null;
     const { data: listing } = await ctx.sb.from('listings').select('id').eq('vehicle_id', vehicleId).maybeSingle();
     if (listing) {
@@ -275,12 +276,15 @@ export async function POST(req: Request) {
         .eq('vehicle_id', vehicleId);
       if (lErr) throw lErr;
     } else if (full) {
-      const base = `${full.year}-${full.make}-${full.model}-${String(full.reg_number).slice(-4)}`;
+      // Slug is permanent once published — never recompute it for an existing
+      // listing, or every shared link and search hit breaks.
+      const trim = full.variant ? `-${full.variant}` : '';
+      const base = `${full.year}-${full.make}-${full.model}${trim}-${String(full.reg_number).slice(-4)}`;
       const slug = `${slugify(base)}-${vehicleId.slice(0, 6)}`;
       const { error: cErr } = await ctx.sb.from('listings').insert({
         vehicle_id: vehicleId,
         slug,
-        title: `${full.year} ${full.make} ${full.model}`,
+        title: carTitle(full),
         price,
         description: '',
         status: 'LIVE',

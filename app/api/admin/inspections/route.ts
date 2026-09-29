@@ -3,6 +3,7 @@ import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { getServiceClient } from '@/lib/supabase/service';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
 import { notifyStaffAssigned } from '@/lib/notify';
+import { carTitle, normalizeCarName } from '@/lib/data/car-names';
 
 const INSPECTION_STATUSES = ['Pending', 'Assigned', 'In Progress', 'Completed', 'Cancelled'] as const;
 
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
       vehicleId: v.id,
       inspectionCode: v.inspection_id,
       regNumber: v.reg_number,
-      vehicle: `${v.year} ${v.make} ${v.model}${v.variant ? ` ${v.variant}` : ''}`,
+      vehicle: carTitle(v),
       make: v.make,
       model: v.model,
       variant: v.variant,
@@ -118,13 +119,15 @@ export async function POST(req: Request) {
     if (!Number.isFinite(year) || year < 2000 || year > 2030) return NextResponse.json({ error: { message: 'Enter a valid model year (2000–2030).', code: 'VALIDATION' } }, { status: 422 });
     if (!location) return NextResponse.json({ error: { message: 'Enter the inspection location.', code: 'VALIDATION' } }, { status: 422 });
 
+    const name = normalizeCarName({ make, model, variant });
+
     const { data: inserted, error: iErr } = await ctx.sb
       .from('vehicles')
       .insert({
         reg_number: reg,
-        make: make.charAt(0).toUpperCase() + make.slice(1).toLowerCase(),
-        model,
-        variant,
+        make: name.make,
+        model: name.model,
+        variant: name.variant,
         year,
         fuel,
         transmission,

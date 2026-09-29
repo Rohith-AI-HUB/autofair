@@ -11,6 +11,7 @@ import {
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
 import { addVehiclePhotoRows } from '@/lib/supabase/queries';
 import { verifiedInspection } from '@/lib/data/inspections';
+import { carTitle } from '@/lib/data/car-names';
 
 const RATING_FIELDS = [
   { key: 'exterior', label: 'Exterior /10' },
@@ -176,7 +177,7 @@ export function StaffWorkspace() {
           items: sec.items.map((i) => ({ name: i.name, result: i.result, note: i.note })),
         })),
       });
-      setDone(`Verified. ${selected.vehicle.year} ${selected.vehicle.make} ${selected.vehicle.model} is now LIVE in /cars with its real Trust Report.`);
+      setDone(`Verified. ${carTitle(selected.vehicle)} is now LIVE in /cars with its real Trust Report.`);
       // Move the file to Completed instead of dropping it, so the
       // Completed tab shows history without a refetch.
       setRows((rs) =>

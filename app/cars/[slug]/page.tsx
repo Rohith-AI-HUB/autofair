@@ -7,7 +7,8 @@ import { VehicleSummary } from '@/components/cars/VehicleSummary';
 import { TrustReport } from '@/components/cars/TrustReport';
 import { CarCard } from '@/components/cars/CarCard';
 import { ViewCounter } from '@/components/cars/ViewCounter';
-import { cars, getCarBySlug, carTitle } from '@/lib/data/cars';
+import { cars, getCarBySlug } from '@/lib/data/cars';
+import { carTitle } from '@/lib/data/car-names';
 import { fetchCarBySlugFromDb, fetchLiveCars } from '@/lib/supabase/queries';
 
 // DB rows can change without a deploy (photos added later, price at

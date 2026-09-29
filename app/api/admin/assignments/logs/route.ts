@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, requireRoles } from '@/lib/supabase/server-auth';
 import { logDbError, toSafeApiPayload } from '@/lib/errors/db-error';
+import { carModelName } from '@/lib/data/car-names';
 
 /**
  * GET /api/admin/assignments/logs — assignment history / audit log (ADMIN only).
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
 
     const vMap = new Map<string, { code: string; reg: string; label: string }>();
     for (const v of ((vehicles ?? []) as Array<{ id: string; inspection_id: string; reg_number: string; make: string; model: string }>)) {
-      vMap.set(v.id, { code: v.inspection_id, reg: v.reg_number, label: `${v.make} ${v.model}` });
+      vMap.set(v.id, { code: v.inspection_id, reg: v.reg_number, label: carModelName(v) });
     }
     const sMap = new Map<string, { name: string; email: string | null }>();
     for (const s of ((staff ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>)) {

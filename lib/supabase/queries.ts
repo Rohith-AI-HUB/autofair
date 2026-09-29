@@ -3,6 +3,7 @@ import type { DbInspection, DbInspectionItem, DbInspectionSection, DbListing, Db
 import { getServerClient } from '@/lib/supabase/server';
 import { getAuthedBrowserClient } from '@/lib/supabase/client';
 import { fetchCurrentProfile, getRoleHome } from '@/lib/auth/roles';
+import { carTitle, normalizeCarName } from '@/lib/data/car-names';
 import {
   DbOperationError,
   SAFE_MESSAGES,
@@ -316,15 +317,18 @@ export async function updateMyVehicle(vehicleId: string, patch: UpdateVehiclePat
     allowed.km_driven = n;
   }
   if (patch.location !== undefined) allowed.location = patch.location.trim().replace(/\s+/g, ' ');
-  if (patch.make !== undefined) {
-    const m = patch.make.trim().replace(/\s+/g, ' ');
-    if (m) allowed.make = m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+  if (patch.make !== undefined || patch.model !== undefined || patch.variant !== undefined) {
+    const name = normalizeCarName({
+      make: patch.make ?? '',
+      model: patch.model ?? '',
+      variant: patch.variant ?? '',
+    });
+    if (patch.make !== undefined && name.make) allowed.make = name.make;
+    if (patch.model !== undefined && name.model) allowed.model = name.model;
+    // A trim lifted out of the model box must persist; an empty result must not
+    // wipe a variant the caller never sent.
+    if (name.variant || patch.variant !== undefined) allowed.variant = name.variant;
   }
-  if (patch.model !== undefined) {
-    const m = patch.model.trim().replace(/\s+/g, ' ');
-    if (m) allowed.model = m;
-  }
-  if (patch.variant !== undefined) allowed.variant = patch.variant.trim();
   if (patch.year !== undefined) {
     const y = Number(patch.year);
     if (!Number.isInteger(y) || y < 2005 || y > 2026) {
@@ -370,6 +374,29 @@ export async function updateMyVehicle(vehicleId: string, patch: UpdateVehiclePat
       await sb.from('listings').update({ price: allowed.price_expected }).eq('vehicle_id', vehicleId);
     } catch (err) {
       logDbError('listings.syncPrice', err, { vehicleId });
+    }
+  }
+  // listings.title used to be written once at publish time and then frozen, so it
+  // drifted from the car it describes. Recompute it from the saved row.
+  const nameChanged =
+    allowed.make !== undefined || allowed.model !== undefined ||
+    allowed.variant !== undefined || allowed.year !== undefined;
+  if (nameChanged) {
+    try {
+      const { data: saved } = await sb
+        .from('vehicles')
+        .select('year,make,model,variant')
+        .eq('id', vehicleId)
+        .maybeSingle();
+      if (saved) {
+        const v = saved as Pick<DbVehicle, 'year' | 'make' | 'model' | 'variant'>;
+        await sb
+          .from('listings')
+          .update({ title: carTitle(v) })
+          .eq('vehicle_id', vehicleId);
+      }
+    } catch (err) {
+      logDbError('listings.syncTitle', err, { vehicleId });
     }
   }
   invalidateMyVehiclesCache();
@@ -745,8 +772,7 @@ export async function createVehicleRow(
     }
   }
 
-  const normMake = input.make.trim().replace(/\s+/g, ' ');
-  const normMakeTitle = normMake.charAt(0).toUpperCase() + normMake.slice(1).toLowerCase();
+  const name = normalizeCarName(input);
   const normLocation = input.location.trim().replace(/\s+/g, ' ');
 
   const { data: vehicle, error: vErr } = await sb
@@ -754,9 +780,9 @@ export async function createVehicleRow(
     .insert({
       seller_id: sellerId,
       reg_number: input.reg.toUpperCase().trim(),
-      make: normMakeTitle,
-      model: input.model.trim().replace(/\s+/g, ' '),
-      variant: (input.variant ?? '').trim(),
+      make: name.make,
+      model: name.model,
+      variant: name.variant,
       year: input.year,
       fuel: input.fuel,
       transmission: input.transmission,

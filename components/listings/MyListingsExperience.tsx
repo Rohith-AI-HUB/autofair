@@ -23,6 +23,7 @@ import type { DbVehiclePhoto } from '@/lib/supabase/db-types';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
 import { getSafeErrorMessage } from '@/lib/errors/db-error';
 import { openAuthModal } from '@/lib/auth/modal';
+import { carTitle, normalizeCarName } from '@/lib/data/car-names';
 import { cn } from '@/lib/utils';
 
 function formatLakh(n: number): string {
@@ -47,7 +48,7 @@ function mapRow(r: MyVehicleRow): Listing {
             : v.status === 'submitted' || v.status === 'in_review' || v.status === 'verified' || l?.status === 'IN_REVIEW'
               ? 'IN REVIEW'
               : 'DRAFT';
-  const title = `${v.year} ${v.make} ${v.model}${v.variant ? ` ${v.variant}` : ''}`;
+  const title = carTitle(v);
   const priceNum = l?.price ?? v.price_expected;
   const price = formatLakh(priceNum);
   const viewsNum = l?.views_count ?? 0;
@@ -603,10 +604,14 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
     try {
       const roundedPrice = Math.round(price);
       const roundedKm = Math.round(km);
+      // Same normalization updateMyVehicle applies server-side, so the optimistic
+      // row shows the stored name rather than flashing the raw input back.
+      const name = normalizeCarName({ make, model });
+      const nextVariant = name.variant || rawMap[editingId]?.vehicle.variant || '';
       const patch = {
         reg_number: reg,
-        make,
-        model,
+        make: name.make,
+        model: name.model,
         year,
         fuel: fuel as 'Petrol' | 'Diesel' | 'CNG' | 'Electric' | 'Hybrid',
         transmission: transmission as 'Manual' | 'Automatic' | 'AMT' | 'CVT',
@@ -641,7 +646,7 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
       } else if (editNewFiles.length) {
         nextCover = editNewFiles[0].url;
       }
-      const nextTitle = `${year} ${make} ${model}`;
+      const nextTitle = carTitle({ year, make: name.make, model: name.model, variant: nextVariant });
       const kmLabel = `${Math.round(roundedKm / 1000)}K KM`;
       const nextSpec = `${year}  •  ${fuel.toUpperCase()}  •  ${kmLabel}  •  ${reg}`;
       setRows((rs) =>
@@ -669,8 +674,9 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
             vehicle: {
               ...cur.vehicle,
               reg_number: reg,
-              make: make.charAt(0).toUpperCase() + make.slice(1).toLowerCase(),
-              model,
+              make: name.make,
+              model: name.model,
+              variant: nextVariant,
               year,
               fuel: fuel as 'Petrol' | 'Diesel' | 'CNG' | 'Electric' | 'Hybrid',
               transmission: transmission as 'Manual' | 'Automatic' | 'AMT' | 'CVT',

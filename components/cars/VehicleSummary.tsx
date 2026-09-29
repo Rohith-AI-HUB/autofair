@@ -1,5 +1,6 @@
 import type { Car } from '@/types';
-import { carTitle, formatKm, formatPrice } from '@/lib/data/cars';
+import { formatKm, formatPrice } from '@/lib/data/cars';
+import { carTitle } from '@/lib/data/car-names';
 import { SellerContact } from '@/components/cars/SellerContact';
 
 export function VehicleSummary({ car }: { car: Car }) {

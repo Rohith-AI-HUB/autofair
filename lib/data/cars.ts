@@ -209,8 +209,3 @@ export function formatPrice(n: number): string {
 export function formatKm(n: number): string {
   return `${n.toLocaleString('en-IN')} km`;
 }
-
-export function carTitle(car: Pick<Car, 'year' | 'make' | 'model' | 'variant'>): string {
-  const v = car.variant && car.variant.trim() && car.variant.trim() !== '—' ? ` ${car.variant.trim()}` : '';
-  return `${car.year} ${car.make} ${car.model}${v}`;
-}

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Car } from '@/types';
-import { carTitle, formatKm, formatPrice } from '@/lib/data/cars';
+import { formatKm, formatPrice } from '@/lib/data/cars';
+import { carTitle } from '@/lib/data/car-names';
 
 export function CarCard({
   car,
