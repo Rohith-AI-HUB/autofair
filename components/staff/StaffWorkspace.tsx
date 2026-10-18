@@ -11,7 +11,7 @@ import {
   type StaffAssignment,
 } from '@/lib/supabase/staff';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
-import { appendVehiclePhotoRows, invalidateLiveCarsCache } from '@/lib/supabase/queries';
+import { appendVehiclePhotoRows, invalidateLiveCarsCache, MAX_VEHICLE_PHOTOS } from '@/lib/supabase/queries';
 import { verifiedInspection } from '@/lib/data/inspections';
 import { carTitle } from '@/lib/data/car-names';
 
@@ -272,6 +272,16 @@ export function StaffWorkspace() {
       setFormError('Overall condition must be a number 0–10.');
       return;
     }
+    const slots = MAX_VEHICLE_PHOTOS - selected.photos.length;
+    if (files.length > slots) {
+      setFormError(
+        slots === 0
+          ? `This car already has all ${MAX_VEHICLE_PHOTOS} photos.`
+          : `Only ${slots} slot${slots === 1 ? '' : 's'} left of ${MAX_VEHICLE_PHOTOS} — ` +
+              `you selected ${files.length}. Choose ${slots} or fewer.`
+      );
+      return;
+    }
     setBusy(true);
     try {
       if (files.length) {
@@ -307,6 +317,11 @@ export function StaffWorkspace() {
     }
   }
 
+  function slotsLeft(vehicleId: string) {
+    const car = (rows ?? []).find((r) => r.vehicle.id === vehicleId);
+    return car ? Math.max(0, MAX_VEHICLE_PHOTOS - car.photos.length) : MAX_VEHICLE_PHOTOS;
+  }
+
   /**
    * Card-level shortcut: append photos to one file without opening the edit
    * form. Reuses the same compress -> Storage -> appendVehiclePhotoRows path,
@@ -315,6 +330,18 @@ export function StaffWorkspace() {
   async function addPhotosFromPicker(picked: File[]) {
     const vehicleId = photoTargetId.current;
     if (!vehicleId || !picked.length) return;
+    const left = slotsLeft(vehicleId);
+    if (picked.length > left) {
+      setPhotoNote({
+        ok: false,
+        text:
+          left === 0
+            ? `This car already has all ${MAX_VEHICLE_PHOTOS} photos.`
+            : `Only ${left} slot${left === 1 ? '' : 's'} left of ${MAX_VEHICLE_PHOTOS} — you selected ` +
+              `${picked.length}. Choose ${left} or fewer.`,
+      });
+      return;
+    }
     setPhotoBusyId(vehicleId);
     setPhotoNote(null);
     try {
@@ -513,6 +540,7 @@ export function StaffWorkspace() {
               const isDone =
                 ['verified', 'published', 'sold'].includes(r.vehicle.status) ||
                 r.vehicle.inspection_status === 'Completed';
+              const left = Math.max(0, MAX_VEHICLE_PHOTOS - r.photos.length);
               return (
               <div
                 key={r.vehicle.id}
@@ -549,7 +577,7 @@ export function StaffWorkspace() {
                   {r.vehicle.assigned_staff_id && (
                     <button
                       type="button"
-                      disabled={photoBusyId === r.vehicle.id}
+                      disabled={photoBusyId === r.vehicle.id || left === 0}
                       onClick={() => {
                         photoTargetId.current = r.vehicle.id;
                         setPhotoNote(null);
@@ -557,7 +585,11 @@ export function StaffWorkspace() {
                       }}
                       className="border border-line bg-white px-2 py-1 font-mono text-[10px] tracking-[0.06em] text-teal-dark hover:border-navy disabled:opacity-50"
                     >
-                      {photoBusyId === r.vehicle.id ? 'ADDING…' : 'ADD PHOTOS'}
+                      {photoBusyId === r.vehicle.id
+                        ? 'ADDING…'
+                        : left === 0
+                          ? `FULL ${MAX_VEHICLE_PHOTOS}/${MAX_VEHICLE_PHOTOS}`
+                          : `ADD PHOTOS (${left} LEFT)`}
                     </button>
                   )}
                 </div>
@@ -830,7 +862,7 @@ export function StaffWorkspace() {
               <label className="mt-4 block">
                 <span className="font-mono text-[10px] text-muted">
                   {editing
-                    ? `ADD PHOTOS — ${selected.photos.length} already on this file`
+                    ? `ADD PHOTOS — ${selected.photos.length} of ${MAX_VEHICLE_PHOTOS} used · ${Math.max(0, MAX_VEHICLE_PHOTOS - selected.photos.length)} left`
                     : 'INSPECTION PHOTOS (OPTIONAL)'}
                 </span>
                 <input

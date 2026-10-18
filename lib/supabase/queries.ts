@@ -876,6 +876,9 @@ export async function fetchVehiclePhotos(vehicleId: string): Promise<DbVehiclePh
   }
 }
 
+/** Buyer galleries stop here; every photo write path enforces it. */
+export const MAX_VEHICLE_PHOTOS = 10;
+
 export async function appendVehiclePhotoRows(
   vehicleId: string,
   uploaded: { storagePath: string; publicUrl: string }[]
@@ -889,6 +892,23 @@ export async function appendVehiclePhotoRows(
       userMessage: SAFE_MESSAGES.UNAVAILABLE,
       context: { vehicleId, photoCount: uploaded.length },
     });
+  }
+  const { count } = await sb
+    .from('vehicle_photos')
+    .select('id', { count: 'exact', head: true })
+    .eq('vehicle_id', vehicleId);
+  const existing = count ?? 0;
+  if (existing + uploaded.length > MAX_VEHICLE_PHOTOS) {
+    throw new DbOperationError(
+      'vehicle_photos.insert',
+      new Error(`Photo limit exceeded: ${existing} existing + ${uploaded.length} new`),
+      {
+        status: 422,
+        code: 'VALIDATION',
+        userMessage: `A car can have at most ${MAX_VEHICLE_PHOTOS} photos — this one already has ${existing}.`,
+        context: { vehicleId, existing, requested: uploaded.length },
+      }
+    );
   }
   // Offset after existing photos so cover (sort_order 0) is preserved.
   let base = 0;
