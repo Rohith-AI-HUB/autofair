@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronDown, ImagePlus } from 'lucide-react';
 import { Container } from '@/components/shared/Container';
 import { cn } from '@/lib/utils';
-import { createVehicleRow, addVehiclePhotoRows, invalidateMyVehiclesCache, invalidateLiveCarsCache, fetchMyVehicleById, fetchMyVehicleByReg, updateMyVehicle } from '@/lib/supabase/queries';
+import { createVehicleRow, appendVehiclePhotoRows, invalidateMyVehiclesCache, invalidateLiveCarsCache, fetchMyVehicleById, fetchMyVehicleByReg, updateMyVehicle } from '@/lib/supabase/queries';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
 import { isSupabaseConfigured, getAuthedBrowserClient } from '@/lib/supabase/client';
 import { DbOperationError, getSafeErrorMessage } from '@/lib/errors/db-error';
@@ -230,7 +230,7 @@ export function SellForm() {
               editId,
               photos.map((p) => p.file)
             );
-            await addVehiclePhotoRows(editId, uploaded);
+            await appendVehiclePhotoRows(editId, uploaded);
           } catch (photoErr) {
             // Details saved; only the new photos failed. Resume instead of
             // reporting a total failure.
@@ -300,7 +300,7 @@ export function SellForm() {
           vehicleId,
           photos.map((p) => p.file)
         );
-        await addVehiclePhotoRows(vehicleId, uploaded);
+        await appendVehiclePhotoRows(vehicleId, uploaded);
       } catch (photoErr) {
         invalidateMyVehiclesCache();
         setRecovery({ vehicleId, inspectionId: newId, reason: 'photos-failed' });

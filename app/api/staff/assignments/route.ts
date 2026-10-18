@@ -50,20 +50,18 @@ export async function GET(req: Request) {
       return true;
     }).slice(0, 50);
 
-    const out: Array<{ vehicle: unknown; listing: unknown; coverUrl: string | null }> = [];
+    const out: Array<{ vehicle: unknown; listing: unknown; photos: unknown }> = [];
     for (const v of ((vehicles ?? []) as Array<{ id: string }>)) {
       const vehicle = v as unknown as { id: string };
       const [{ data: listing }, { data: photos }] = await Promise.all([
         ctx.sb.from('listings').select('*').eq('vehicle_id', vehicle.id).maybeSingle(),
         ctx.sb
           .from('vehicle_photos')
-          .select('public_url,sort_order')
+          .select('id,public_url,sort_order')
           .eq('vehicle_id', vehicle.id)
-          .order('sort_order')
-          .limit(1),
+          .order('sort_order'),
       ]);
-      const cover = (photos as Array<{ public_url: string }> | null)?.[0]?.public_url ?? null;
-      out.push({ vehicle, listing: listing ?? null, coverUrl: cover });
+      out.push({ vehicle, listing: listing ?? null, photos: photos ?? [] });
     }
     return NextResponse.json({ data: out });
   } catch (err) {

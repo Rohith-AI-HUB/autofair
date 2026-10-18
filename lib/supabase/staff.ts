@@ -2,12 +2,18 @@
 
 import { getSessionFromAnyStore } from '@/lib/supabase/client';
 import { DbOperationError, SAFE_MESSAGES } from '@/lib/errors/db-error';
-import type { DbListing, DbVehicle } from '@/lib/supabase/db-types';
+import type { DbInspection, DbListing, DbVehicle } from '@/lib/supabase/db-types';
+
+export interface StaffPhoto {
+  id: string;
+  public_url: string;
+  sort_order: number;
+}
 
 export interface StaffAssignment {
   vehicle: DbVehicle;
   listing: DbListing | null;
-  coverUrl: string | null;
+  photos: StaffPhoto[];
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -72,6 +78,52 @@ export async function completeStaffVerification(input: VerifyInput): Promise<{ v
   const headers = await authHeaders();
   const res = await fetch('/api/staff/verify', {
     method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = (await res.json().catch(() => null)) as {
+    data?: { vehicleId: string };
+    error?: { message?: string };
+  } | null;
+  if (!res.ok || !body?.data) safeJsonError(res.status, body);
+  return (body as { data: { vehicleId: string } }).data;
+}
+
+/** Everything the edit form needs. Price is intentionally absent: it stays locked. */
+export interface StaffVehicleDetail {
+  vehicle: { id: string; status: string };
+  listing: DbListing | null;
+  inspection: DbInspection | null;
+  sections: { title: string; items: { name: string; result: string; note: string }[] }[];
+  photos: StaffPhoto[];
+}
+
+export type VerificationEditInput = Omit<VerifyInput, 'vehicleId' | 'price'>;
+
+/** Staff (assignee only): read a completed verification for editing. */
+export async function fetchStaffVehicle(vehicleId: string): Promise<StaffVehicleDetail> {
+  const headers = await authHeaders();
+  const res = await fetch(`/api/staff/vehicles/${vehicleId}`, { headers, cache: 'no-store' });
+  const body = (await res.json().catch(() => null)) as {
+    data?: StaffVehicleDetail;
+    error?: { message?: string };
+  } | null;
+  if (!res.ok || !body?.data) safeJsonError(res.status, body);
+  return (body as { data: StaffVehicleDetail }).data;
+}
+
+/**
+ * Staff (assignee only): save corrections to a published verification.
+ * The backend refuses to touch vehicle status, listing status, price or
+ * published_at, so this can never republish or re-rank a live ad.
+ */
+export async function updateStaffVerification(
+  vehicleId: string,
+  input: VerificationEditInput
+): Promise<{ vehicleId: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`/api/staff/vehicles/${vehicleId}`, {
+    method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });

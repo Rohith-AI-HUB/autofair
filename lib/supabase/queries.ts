@@ -853,48 +853,6 @@ export async function fetchMyVehicleByReg(reg: string): Promise<{ vehicleId: str
   }
 }
 
-export async function addVehiclePhotoRows(  vehicleId: string,
-  uploaded: { storagePath: string; publicUrl: string }[]
-): Promise<void> {
-  if (!uploaded.length) return;
-  const sb = await getAuthedBrowserClient();
-  if (!sb) {
-    throw new DbOperationError('vehicle_photos.insert', new Error('Supabase not configured'), {
-      status: 503,
-      code: 'UNAVAILABLE',
-      userMessage: SAFE_MESSAGES.UNAVAILABLE,
-      context: { vehicleId, photoCount: uploaded.length },
-    });
-  }
-  const rows = uploaded.map((u, i) => ({
-    vehicle_id: vehicleId,
-    storage_path: u.storagePath,
-    public_url: u.publicUrl,
-    sort_order: i,
-    is_cover: i === 0,
-  }));
-  const { error: pErr } = await sb.from('vehicle_photos').insert(rows);
-  if (pErr) {
-    const classified = classifyDbError(pErr);
-    throw new DbOperationError('vehicle_photos.insert', pErr, {
-      ...(classified.code === 'INTERNAL'
-        ? { status: 500 as const, code: 'INTERNAL' as const, userMessage: SAFE_MESSAGES.PHOTOS_SAVE_FAILED }
-        : {}),
-      context: { vehicleId, photoCount: uploaded.length },
-    });
-  }
-}
-
-// Backwards-compat: old helper that accepted pre-uploaded URLs
-export async function createVehicleWithPhotos(
-  input: SellInput,
-  uploaded: { storagePath: string; publicUrl: string }[]
-): Promise<{ vehicleId: string; inspectionId: string }> {
-  const { vehicleId, inspectionId } = await createVehicleRow(input);
-  await addVehiclePhotoRows(vehicleId, uploaded);
-  return { vehicleId, inspectionId };
-}
-
 // Edit-dialog photo pipeline: owner can view / append / remove photos.
 // Display order is sort_order (cover = smallest). Uses only INSERT + DELETE
 // (no UPDATE) so existing owner RLS policies apply.

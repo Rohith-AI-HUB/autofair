@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Container } from '@/components/shared/Container';
 import { getSafeErrorMessage } from '@/lib/errors/db-error';
 import {
   completeStaffVerification,
   fetchStaffAssignments,
+  fetchStaffVehicle,
+  updateStaffVerification,
   type StaffAssignment,
 } from '@/lib/supabase/staff';
 import { uploadVehiclePhotos } from '@/lib/supabase/storage';
-import { addVehiclePhotoRows } from '@/lib/supabase/queries';
+import { appendVehiclePhotoRows, invalidateLiveCarsCache } from '@/lib/supabase/queries';
 import { verifiedInspection } from '@/lib/data/inspections';
 import { carTitle } from '@/lib/data/car-names';
 
@@ -30,12 +32,58 @@ type SectionDraft = {
   items: { name: string; result: 'pass' | 'attention' | 'fail'; note: string }[];
 };
 
+function buildRatings(raw: Record<string, string>): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  for (const { key } of RATING_FIELDS) {
+    const v = raw[key];
+    if (v == null || v === '') continue;
+    const n = Number(v);
+    out[key] = Number.isFinite(n) ? Math.min(10, Math.max(0, n)) : null;
+  }
+  return out;
+}
+
+function sectionPayload(sections: SectionDraft[]) {
+  return sections.map((sec) => ({
+    title: sec.title,
+    items: sec.items.map((i) => ({ name: i.name, result: i.result, note: i.note })),
+  }));
+}
+
 function freshSections(): SectionDraft[] {
   return verifiedInspection.map((c) => ({
     id: c.id,
     title: c.title,
     items: c.items.map((i) => ({ name: i.name, result: i.result, note: '' })),
   }));
+}
+
+const DEFAULT_CONDITION = { mechanical: 'VERY GOOD', exterior: 'GOOD', interior: 'VERY GOOD', tyres: 'GOOD' };
+
+/**
+ * Replay a stored breakdown onto the current checklist template, matching on
+ * title + item name. Keeps the edit form in template order and leaves any
+ * check the template dropped at its default.
+ */
+function mergeSections(
+  template: SectionDraft[],
+  stored: { title: string; items: { name: string; result: string; note: string }[] }[]
+): SectionDraft[] {
+  const byTitle = new Map(stored.map((s) => [s.title.trim().toUpperCase(), s]));
+  return template.map((sec) => {
+    const hit = byTitle.get(sec.title.trim().toUpperCase());
+    if (!hit) return sec;
+    const byName = new Map(hit.items.map((i) => [i.name.trim().toLowerCase(), i]));
+    return {
+      ...sec,
+      items: sec.items.map((it) => {
+        const h = byName.get(it.name.trim().toLowerCase());
+        if (!h) return it;
+        const result = h.result === 'attention' || h.result === 'fail' ? h.result : 'pass';
+        return { ...it, result, note: h.note ?? '' };
+      }),
+    };
+  });
 }
 
 /**
@@ -52,12 +100,7 @@ export function StaffWorkspace() {
   const [overall, setOverall] = useState<'pass' | 'attention' | 'fail'>('attention');
   const [notes, setNotes] = useState('');
   const [ratings, setRatings] = useState<Record<string, string>>({});
-  const [condition, setCondition] = useState<Record<string, string>>({
-    mechanical: 'VERY GOOD',
-    exterior: 'GOOD',
-    interior: 'VERY GOOD',
-    tyres: 'GOOD',
-  });
+  const [condition, setCondition] = useState<Record<string, string>>({ ...DEFAULT_CONDITION });
   const [accidentStatus, setAccidentStatus] = useState('CLEAR');
   const [accidentNote, setAccidentNote] = useState('');
   const [docsStatus, setDocsStatus] = useState('1 PENDING');
@@ -70,6 +113,12 @@ export function StaffWorkspace() {
   const [done, setDone] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [tab, setTab] = useState<'pending' | 'completed'>('pending');
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
+  const [photoNote, setPhotoNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const photoTargetId = useRef<string | null>(null);
 
   useEffect(() => {
     fetchStaffAssignments()
@@ -98,7 +147,19 @@ export function StaffWorkspace() {
       ),
     [rows]
   );
-  const visible = tab === 'pending' ? pending : completed;
+  const visible = useMemo(() => {
+    const base = tab === 'pending' ? pending : completed;
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((r) => {
+      const v = r.vehicle;
+      return [v.year, v.make, v.model, v.variant, v.reg_number, v.inspection_id, v.location]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [tab, pending, completed, query]);
 
   const selected = rows?.find((r) => r.vehicle.id === selectedId) ?? null;
   const selectedIsCompleted = Boolean(
@@ -127,6 +188,158 @@ export function StaffWorkspace() {
     );
   }
 
+  /**
+   * The form is a single shared set of inputs, so it must be wiped whenever the
+   * selected file changes — otherwise the numbers typed for one car get saved
+   * onto the next one.
+   */
+  function resetForm() {
+    setScore('8.0');
+    setOverall('attention');
+    setNotes('');
+    setRatings({});
+    setCondition({ ...DEFAULT_CONDITION });
+    setAccidentStatus('CLEAR');
+    setAccidentNote('');
+    setDocsStatus('1 PENDING');
+    setDocsNote('');
+    setSections(freshSections());
+    setOpenSection('tyres');
+    setPrice('');
+    setFiles([]);
+    setDone(null);
+    setFormError(null);
+    setEditing(false);
+  }
+
+  function conditionPayload() {
+    return {
+      mechanical: condition.mechanical,
+      exterior: condition.exterior,
+      interior: condition.interior,
+      tyres: condition.tyres,
+    };
+  }
+
+  /** Load a completed verification back into the form for corrections. */
+  async function openEdit() {
+    if (!selected) return;
+    setBusy(true);
+    setFormError(null);
+    setDone(null);
+    try {
+      const d = await fetchStaffVehicle(selected.vehicle.id);
+      const insp = d.inspection;
+      if (insp) {
+        if (insp.score != null) setScore(String(insp.score));
+        setOverall(insp.overall_status ?? 'attention');
+        setNotes(insp.notes ?? '');
+        setRatings(
+          Object.fromEntries(
+            Object.entries(insp.ratings ?? {}).map(([k, v]) => [k, v == null ? '' : String(v)])
+          )
+        );
+        setCondition({
+          mechanical: insp.condition?.mechanical ?? DEFAULT_CONDITION.mechanical,
+          exterior: insp.condition?.exterior ?? DEFAULT_CONDITION.exterior,
+          interior: insp.condition?.interior ?? DEFAULT_CONDITION.interior,
+          tyres: insp.condition?.tyres ?? DEFAULT_CONDITION.tyres,
+        });
+        setAccidentStatus(insp.accident_status ?? 'CLEAR');
+        setAccidentNote(insp.accident_note ?? '');
+        setDocsStatus(insp.docs_status ?? '1 PENDING');
+        setDocsNote(insp.docs_note ?? '');
+      }
+      setSections(mergeSections(freshSections(), d.sections));
+      setEditing(true);
+    } catch (err) {
+      setFormError(getSafeErrorMessage(err, 'Could not open this file for editing.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Save corrections to a published file. Price is never sent: the endpoint
+   * that receives this refuses to touch status or published_at on purpose.
+   */
+  async function saveEdit() {
+    setFormError(null);
+    setDone(null);
+    if (!selected) return;
+    const s = Number(score);
+    if (!Number.isFinite(s) || s < 0 || s > 10) {
+      setFormError('Overall condition must be a number 0–10.');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (files.length) {
+        const uploaded = await uploadVehiclePhotos(selected.vehicle.id, files);
+        await appendVehiclePhotoRows(selected.vehicle.id, uploaded);
+      }
+      await updateStaffVerification(selected.vehicle.id, {
+        score: s,
+        overallStatus: overall,
+        notes,
+        ratings: buildRatings(ratings),
+        condition: conditionPayload(),
+        accidentStatus,
+        accidentNote,
+        docsStatus,
+        docsNote,
+        sections: sectionPayload(sections),
+      });
+      invalidateLiveCarsCache();
+      const added = files.length;
+      setFiles([]);
+      setEditing(false);
+      fetchStaffAssignments().then(setRows).catch(() => {});
+      setDone(
+        added
+          ? `Changes saved, ${added} photo${added === 1 ? '' : 's'} added. The live dossier updates within a minute.`
+          : 'Changes saved. The live dossier updates within a minute.'
+      );
+    } catch (err) {
+      setFormError(getSafeErrorMessage(err, 'Could not save your changes.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Card-level shortcut: append photos to one file without opening the edit
+   * form. Reuses the same compress -> Storage -> appendVehiclePhotoRows path,
+   * so the cover and the existing sort_order are preserved.
+   */
+  async function addPhotosFromPicker(picked: File[]) {
+    const vehicleId = photoTargetId.current;
+    if (!vehicleId || !picked.length) return;
+    setPhotoBusyId(vehicleId);
+    setPhotoNote(null);
+    try {
+      const uploaded = await uploadVehiclePhotos(vehicleId, picked);
+      await appendVehiclePhotoRows(vehicleId, uploaded);
+      invalidateLiveCarsCache();
+      const fresh = await fetchStaffAssignments();
+      setRows(fresh);
+      const car = fresh.find((r) => r.vehicle.id === vehicleId);
+      setPhotoNote({
+        ok: true,
+        text:
+          `${uploaded.length} photo${uploaded.length === 1 ? '' : 's'} added to ` +
+          `${car ? carTitle(car.vehicle) : 'this car'}. The live dossier updates within a minute.`,
+      });
+    } catch (err) {
+      setPhotoNote({
+        ok: false,
+        text: getSafeErrorMessage(err, 'Photos could not be uploaded.'),
+      });
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
   async function submit() {
     setFormError(null);
     setDone(null);
@@ -146,36 +359,21 @@ export function StaffWorkspace() {
       // Optional inspection photos reuse the existing 0-rupee pipeline.
       if (files.length) {
         const uploaded = await uploadVehiclePhotos(selected.vehicle.id, files);
-        await addVehiclePhotoRows(selected.vehicle.id, uploaded);
-      }
-      const parsedRatings: Record<string, number | null> = {};
-      for (const { key } of RATING_FIELDS) {
-        const raw = ratings[key];
-        if (raw == null || raw === '') continue;
-        const n = Number(raw);
-        parsedRatings[key] = Number.isFinite(n) ? Math.min(10, Math.max(0, n)) : null;
+        await appendVehiclePhotoRows(selected.vehicle.id, uploaded);
       }
       await completeStaffVerification({
         vehicleId: selected.vehicle.id,
         score: s,
         overallStatus: overall,
         notes,
-        ratings: parsedRatings,
+        ratings: buildRatings(ratings),
         price: Math.round(p),
-        condition: {
-          mechanical: condition.mechanical,
-          exterior: condition.exterior,
-          interior: condition.interior,
-          tyres: condition.tyres,
-        },
+        condition: conditionPayload(),
         accidentStatus,
         accidentNote,
         docsStatus,
         docsNote,
-        sections: sections.map((sec) => ({
-          title: sec.title,
-          items: sec.items.map((i) => ({ name: i.name, result: i.result, note: i.note })),
-        })),
+        sections: sectionPayload(sections),
       });
       setDone(`Verified. ${carTitle(selected.vehicle)} is now LIVE in /cars with its real Trust Report.`);
       // Move the file to Completed instead of dropping it, so the
@@ -187,9 +385,10 @@ export function StaffWorkspace() {
             : r
         )
       );
+      // Then pull the server truth, so the new photos show in the strip.
+      fetchStaffAssignments().then(setRows).catch(() => {});
       setSelectedId(null);
-      setFiles([]);
-      setSections(freshSections());
+      resetForm();
     } catch (err) {
       setFormError(getSafeErrorMessage(err, 'Could not complete verification. If the breakdown did not save, run migration 0011_real_trust_report.sql in Supabase SQL Editor, then try again.'));
     } finally {
@@ -218,36 +417,93 @@ export function StaffWorkspace() {
         <p className="mt-6 font-mono text-[11px] text-muted" role="status">LOADING ASSIGNMENTS…</p>
       ) : (
         <>
-          <div role="group" aria-label="Filter by verification status" className="mt-6 flex flex-wrap gap-0 bg-[#EFEAE3] p-1">
-            {(
-              [
-                { key: 'pending', label: `Pending · ${pending.length}` },
-                { key: 'completed', label: `Completed · ${completed.length}` },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                aria-pressed={tab === t.key}
-                onClick={() => setTab(t.key)}
-                className={
-                  tab === t.key
-                    ? 'bg-navy px-4 py-[10px] font-sans text-[13px] font-bold text-white'
-                    : 'px-4 py-[10px] font-sans text-[13px] font-semibold text-navy hover:underline'
-                }
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="mt-6 flex flex-wrap items-stretch gap-3">
+            <div role="group" aria-label="Filter by verification status" className="flex flex-wrap gap-0 bg-[#EFEAE3] p-1">
+              {(
+                [
+                  { key: 'pending', label: `Pending · ${pending.length}` },
+                  { key: 'completed', label: `Completed · ${completed.length}` },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  aria-pressed={tab === t.key}
+                  onClick={() => setTab(t.key)}
+                  className={
+                    tab === t.key
+                      ? 'bg-navy px-4 py-[10px] font-sans text-[13px] font-bold text-white'
+                      : 'px-4 py-[10px] font-sans text-[13px] font-semibold text-navy hover:underline'
+                  }
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <label className="min-w-[220px] flex-1">
+              <span className="sr-only">Search cars</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={`Search ${tab} by reg. no, make, model or AF number`}
+                className="h-full w-full border border-line bg-white px-4 py-[10px] font-sans text-[13px] outline-none focus:border-teal"
+              />
+            </label>
           </div>
+
+          {query.trim() && (
+            <p className="mt-2 font-mono text-[10px] text-muted">
+              {visible.length} of {tab === 'pending' ? pending.length : completed.length} shown for “{query.trim()}”
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="ml-2 underline hover:text-navy"
+              >
+                Clear
+              </button>
+            </p>
+          )}
+
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            tabIndex={-1}
+            className="sr-only"
+            onChange={(e) => {
+              const picked = Array.from(e.target.files ?? []);
+              // Reset first: picking the same file twice must re-fire onChange.
+              e.target.value = '';
+              void addPhotosFromPicker(picked);
+            }}
+          />
+
+          {photoNote && (
+            <p
+              role={photoNote.ok ? 'status' : 'alert'}
+              className={
+                photoNote.ok
+                  ? 'mt-2 border border-teal-line bg-teal-bg px-3 py-2 font-sans text-[13px] font-semibold text-teal-dark'
+                  : 'mt-2 border border-coral/50 bg-[#FDECEC] px-3 py-2 font-sans text-[13px] font-semibold text-[#9B2C2C]'
+              }
+            >
+              {photoNote.text}
+            </p>
+          )}
 
           {visible.length === 0 ? (
             <div className="mt-4 border border-line bg-white p-8">
               <p className="font-mono text-[11px] text-teal-dark">
-                {tab === 'pending' ? 'NO PENDING WORK' : 'NOTHING COMPLETED YET'}
+                {query.trim() ? 'NO MATCHES' : tab === 'pending' ? 'NO PENDING WORK' : 'NOTHING COMPLETED YET'}
               </p>
               <p className="mt-2 font-sans text-[16px] font-bold text-navy">
-                {tab === 'pending' ? 'Nothing assigned right now.' : 'Verified files will appear here.'}
+                {query.trim()
+                  ? `Nothing in ${tab} matches “${query.trim()}”.`
+                  : tab === 'pending'
+                    ? 'Nothing assigned right now.'
+                    : 'Verified files will appear here.'}
               </p>
             </div>
           ) : (
@@ -258,40 +514,59 @@ export function StaffWorkspace() {
                 ['verified', 'published', 'sold'].includes(r.vehicle.status) ||
                 r.vehicle.inspection_status === 'Completed';
               return (
-              <button
+              <div
                 key={r.vehicle.id}
-                type="button"
-                aria-pressed={selectedId === r.vehicle.id}
-                onClick={() => {
-                  setSelectedId(r.vehicle.id);
-                  setDone(null);
-                  setFormError(null);
-                }}
                 className={
                   selectedId === r.vehicle.id
-                    ? 'border border-navy bg-white p-4 text-left shadow-[0_8px_30px_rgba(11,23,38,0.12)]'
-                    : 'border border-line bg-white p-4 text-left hover:border-navy'
+                    ? 'border border-navy bg-white p-4 shadow-[0_8px_30px_rgba(11,23,38,0.12)]'
+                    : 'border border-line bg-white p-4 hover:border-navy'
                 }
               >
-                <p className="font-sans text-[15px] font-extrabold text-navy">
-                  {r.vehicle.year} {r.vehicle.make} {r.vehicle.model}
-                </p>
-                <p className="mt-1 font-mono text-[11px] text-muted">
-                  {r.vehicle.reg_number} • {r.vehicle.location} • {r.vehicle.inspection_id}
-                </p>
-                <p className="mt-1 font-mono text-[10px] text-teal-dark">
-                  {isDone
-                    ? 'STATUS: VERIFIED ✓'
-                    : r.vehicle.assigned_staff_id
-                      ? 'STATUS: ASSIGNED'
-                      : 'STATUS: UNASSIGNED — VERIFY TO CLAIM'}
-                </p>
-              </button>
+                <button
+                  type="button"
+                  aria-pressed={selectedId === r.vehicle.id}
+                  onClick={() => {
+                    setSelectedId(r.vehicle.id);
+                    resetForm();
+                  }}
+                  className="block w-full text-left"
+                >
+                  <p className="font-sans text-[15px] font-extrabold text-navy">
+                    {r.vehicle.year} {r.vehicle.make} {r.vehicle.model}
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-muted">
+                    {r.vehicle.reg_number} • {r.vehicle.location} • {r.vehicle.inspection_id}
+                  </p>
+                </button>
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  <p className="font-mono text-[10px] text-teal-dark">
+                    {isDone
+                      ? 'STATUS: VERIFIED ✓'
+                      : r.vehicle.assigned_staff_id
+                        ? 'STATUS: ASSIGNED'
+                        : 'STATUS: UNASSIGNED — VERIFY TO CLAIM'}
+                  </p>
+                  {r.vehicle.assigned_staff_id && (
+                    <button
+                      type="button"
+                      disabled={photoBusyId === r.vehicle.id}
+                      onClick={() => {
+                        photoTargetId.current = r.vehicle.id;
+                        setPhotoNote(null);
+                        photoInput.current?.click();
+                      }}
+                      className="border border-line bg-white px-2 py-1 font-mono text-[10px] tracking-[0.06em] text-teal-dark hover:border-navy disabled:opacity-50"
+                    >
+                      {photoBusyId === r.vehicle.id ? 'ADDING…' : 'ADD PHOTOS'}
+                    </button>
+                  )}
+                </div>
+              </div>
               );
             })}
           </div>
 
-          {selected && selectedIsCompleted ? (
+          {selected && selectedIsCompleted && !editing ? (
             <div className="h-fit border border-teal-line bg-teal-bg p-6">
               <p className="font-mono text-[10px] tracking-[0.06em] text-teal-dark">VERIFIED ✓</p>
               <h2 className="mt-1 font-sans text-[20px] font-extrabold text-navy">
@@ -302,21 +577,68 @@ export function StaffWorkspace() {
                 {selected.vehicle.transmission} • Reg {selected.vehicle.reg_number}
               </p>
               <p className="mt-3 font-mono text-[11px] text-teal-dark">{selected.vehicle.inspection_id}</p>
-              {selected.listing?.slug ? (
-                <a
-                  href={`/cars/${selected.listing.slug}`}
-                  className="mt-4 inline-block bg-navy px-5 py-3 font-sans text-[13px] font-bold text-white hover:bg-navy-2"
-                >
-                  Open live dossier →
-                </a>
+
+              <p className="mt-5 font-mono text-[10px] tracking-[0.06em] text-teal-dark">
+                PHOTOS ON THIS FILE — {selected.photos.length}
+              </p>
+              {selected.photos.length ? (
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {selected.photos.map((p, i) => (
+                    <div key={p.id} className="relative aspect-[4/3] border border-teal-line bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.public_url} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                      <span className="absolute bottom-0 right-0 bg-navy/80 px-1.5 font-mono text-[9px] text-white">
+                        {i + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <p className="mt-4 font-sans text-[13px] text-muted">This file is verified and live in /cars.</p>
+                <p className="mt-2 font-sans text-[13px] font-semibold text-[#9B2C2C]">
+                  No photos on this file yet — buyers see an empty gallery.
+                </p>
+              )}
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={openEdit}
+                  className="bg-navy px-5 py-3 font-sans text-[13px] font-bold text-white hover:bg-navy-2 disabled:opacity-60"
+                >
+                  {busy ? 'Loading…' : 'Edit details / add photos  →'}
+                </button>
+                {selected.listing?.slug ? (
+                  <a
+                    href={`/cars/${selected.listing.slug}`}
+                    className="inline-block border border-navy px-5 py-3 font-sans text-[13px] font-bold text-navy hover:bg-white"
+                  >
+                    Open live dossier →
+                  </a>
+                ) : (
+                  <p className="py-3 font-sans text-[13px] text-muted">This file is verified and live in /cars.</p>
+                )}
+              </div>
+              <p className="mt-3 font-mono text-[10px] text-muted">
+                Editing is limited to whoever completed this verification. Price stays locked.
+              </p>
+              {formError && (
+                <p role="alert" className="mt-4 border border-coral/50 bg-[#FDECEC] px-4 py-3 font-sans text-[13px] font-semibold text-[#9B2C2C]">
+                  {formError}
+                </p>
+              )}
+              {done && (
+                <p role="status" className="mt-4 border border-teal-line bg-white px-4 py-3 font-sans text-[13px] font-semibold text-teal-dark">
+                  {done}
+                </p>
               )}
             </div>
           ) : (
-          selected && !selectedIsCompleted && (
+          selected && (
             <div className="border border-line bg-white p-6">
-              <p className="font-mono text-[10px] tracking-[0.06em] text-muted">ONSITE VISIT</p>
+              <p className="font-mono text-[10px] tracking-[0.06em] text-muted">
+                {editing ? 'CORRECTING A PUBLISHED FILE' : 'ONSITE VISIT'}
+              </p>
               <h2 className="mt-1 font-sans text-[20px] font-extrabold text-navy">
                 {selected.vehicle.year} {selected.vehicle.make} {selected.vehicle.model}
               </h2>
@@ -492,19 +814,25 @@ export function StaffWorkspace() {
                 />
               </label>
 
-              <label className="mt-4 block">
-                <span className="font-mono text-[10px] text-muted">DECIDED LISTING PRICE (₹) *</span>
-                <input
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  inputMode="numeric"
-                  placeholder="e.g. 850000"
-                  className="mt-1.5 w-full border border-line bg-off-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
-                />
-              </label>
+              {!editing && (
+                <label className="mt-4 block">
+                  <span className="font-mono text-[10px] text-muted">DECIDED LISTING PRICE (₹) *</span>
+                  <input
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="e.g. 850000"
+                    className="mt-1.5 w-full border border-line bg-off-white px-4 py-3 font-sans text-[14px] outline-none focus:border-teal"
+                  />
+                </label>
+              )}
 
               <label className="mt-4 block">
-                <span className="font-mono text-[10px] text-muted">INSPECTION PHOTOS (OPTIONAL)</span>
+                <span className="font-mono text-[10px] text-muted">
+                  {editing
+                    ? `ADD PHOTOS — ${selected.photos.length} already on this file`
+                    : 'INSPECTION PHOTOS (OPTIONAL)'}
+                </span>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -512,6 +840,12 @@ export function StaffWorkspace() {
                   onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
                   className="mt-1.5 w-full font-sans text-[13px]"
                 />
+                {files.length > 0 && (
+                  <span className="mt-1 block font-mono text-[10px] text-teal-dark">
+                    {files.length} file{files.length === 1 ? '' : 's'} selected
+                    {editing ? ' — added after the existing photos' : ''}
+                  </span>
+                )}
               </label>
 
               {formError && (
@@ -528,13 +862,28 @@ export function StaffWorkspace() {
               <button
                 type="button"
                 disabled={busy}
-                onClick={submit}
+                onClick={editing ? saveEdit : submit}
                 className="mt-5 w-full bg-navy px-6 py-4 font-sans text-[15px] font-bold text-white hover:bg-navy-2 disabled:opacity-60"
               >
-                {busy ? 'Verifying…' : 'Complete Verification  →'}
+                {busy ? (editing ? 'Saving…' : 'Verifying…') : editing ? 'Save changes  →' : 'Complete Verification  →'}
               </button>
+              {editing && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    resetForm();
+                    setDone('Editing stopped — nothing on this file was changed.');
+                  }}
+                  className="mt-2 w-full border border-line bg-white px-6 py-3 font-sans text-[13px] font-bold text-navy hover:border-navy disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              )}
               <p className="mt-2 font-mono text-[10px] text-muted">
-                Backend sets status VERIFIED + publishes LIVE. Customers cannot self-verify.
+                {editing
+                  ? 'Saves the verification only. Status, price and publish date are untouched.'
+                  : 'Backend sets status VERIFIED + publishes LIVE. Customers cannot self-verify.'}
               </p>
             </div>
           ))}
