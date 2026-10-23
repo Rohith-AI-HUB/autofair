@@ -87,6 +87,7 @@ export interface CurrentProfile {
   role: AppRole;
   dbRole: string | null;
   email: string | null;
+  phone: string | null;
 }
 
 /**
@@ -128,13 +129,13 @@ export async function fetchCurrentProfile(): Promise<CurrentProfile | null> {
     if (!user || !session) return null;
     const sb = getBrowserClient(persist);
     if (!sb) return null;
-    const readRole = () => sb.from('profiles').select('id, role').eq('id', user.id).maybeSingle();
+    const readRole = () => sb.from('profiles').select('id, role, phone').eq('id', user.id).maybeSingle();
     const { data, error } = await readRole();
     if (error) {
       logDbError('profiles.fetchRole', error);
       return null;
     }
-    let row = (data as { id: string; role: string | null } | null) ?? null;
+    let row = (data as { id: string; role: string | null; phone: string | null } | null) ?? null;
     if (!row) {
       // A missing profile is broken provisioning, not a signed-out user, so
       // repair it and read again before giving up. It is not a database error,
@@ -143,7 +144,7 @@ export async function fetchCurrentProfile(): Promise<CurrentProfile | null> {
       if (await provisionMissingProfile(session)) {
         const retry = await readRole();
         if (retry.error) logDbError('profiles.fetchRole', retry.error);
-        row = (retry.data as { id: string; role: string | null } | null) ?? null;
+        row = (retry.data as { id: string; role: string | null; phone: string | null } | null) ?? null;
       }
     }
     const dbRole = row?.role ?? null;
@@ -154,6 +155,7 @@ export async function fetchCurrentProfile(): Promise<CurrentProfile | null> {
       role,
       dbRole,
       email: user.email ?? null,
+      phone: row?.phone ?? null,
     };
   } catch (err) {
     logDbError('profiles.fetchRole', err);

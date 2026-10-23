@@ -5,6 +5,7 @@ import { LedgerBar } from '@/components/layout/LedgerBar';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { AuthModalHost } from '@/components/auth/AuthModalHost';
+import { PhoneGate } from '@/components/auth/PhoneGate';
 import { RoleRouteGate } from '@/components/auth/RoleRouteGate';
 import { Analytics } from "@vercel/analytics/next";
 
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Footer />
         </RoleRouteGate>
         <AuthModalHost />
+        <PhoneGate />
         <Analytics />
       </body>
     </html>

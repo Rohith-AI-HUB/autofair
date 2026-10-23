@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Bookmark, Loader2, Lock, ShieldCheck } from 'lucide-react';
 import { GoogleMark } from '@/components/auth/GoogleMark';
+import { refreshPhoneGate } from '@/components/auth/PhoneGate';
 import {
   getBrowserClient,
   getRememberChoice,
@@ -12,6 +13,7 @@ import {
   setRememberChoice,
 } from '@/lib/supabase/client';
 import { getPostLoginDestination } from '@/lib/supabase/queries';
+import { normalizeIndianMobile } from '@/lib/validation/phone';
 import { getSafeAuthMessage, isLeakyMessage, logDbError } from '@/lib/errors/db-error';
 
 
@@ -38,6 +40,7 @@ export function AuthForm({
   const [mode, setMode] = useState<AuthFormMode>(initialMode);
   const [view, setView] = useState<AuthFormView>('form');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(true);
@@ -69,6 +72,7 @@ export function AuthForm({
   }
 
   async function finishLogin() {
+    refreshPhoneGate();
     // Trusted role first: getPostLoginDestination now returns /admin for
     // admins and /staff for staff (DB source of truth). An explicit `next`
     // is honored only if the role is actually allowed there, otherwise the
@@ -117,6 +121,9 @@ export function AuthForm({
   function validate(): string | null {
     if (!email.trim()) return 'Enter your email address.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'Enter a valid email address.';
+    if (view === 'form' && mode === 'signup' && !normalizeIndianMobile(phone)) {
+      return 'Enter a valid 10-digit Indian mobile number.';
+    }
     if (view === 'form' && !password) return 'Enter your password.';
     if (view === 'form' && mode === 'signup' && password.length < 6) return 'Password must be at least 6 characters.';
     return null;
@@ -151,7 +158,11 @@ export function AuthForm({
       const { data, error } = await sb.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next ?? '/my-listings')}` },
+        options: {
+          emailRedirectTo: `${getSiteUrl()}/auth/callback?next=${encodeURIComponent(next ?? '/my-listings')}`,
+          // handle_new_user() copies raw_user_meta_data.phone into profiles.phone.
+          data: { phone: normalizeIndianMobile(phone) ?? undefined },
+        },
       });
       setBusy(null);
       if (error) {
@@ -344,6 +355,28 @@ export function AuthForm({
 
         {view === 'form' && (
           <>
+            {isSignup && (
+              <div>
+                <label htmlFor="auth-phone" className="font-mono text-[10px] tracking-[0.06em] text-muted">
+                  MOBILE NUMBER (+91)
+                </label>
+                <input
+                  id="auth-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel-national"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="10-digit mobile number"
+                  className={`${inputCls} mt-1.5`}
+                />
+                <p className="mt-1.5 font-sans text-[12px] leading-relaxed text-muted">
+                  Used by AutoFair to contact you about your account. It is never displayed on the
+                  website or attached to any listing.
+                </p>
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between">
                 <label htmlFor="auth-password" className="font-mono text-[10px] tracking-[0.06em] text-muted">
