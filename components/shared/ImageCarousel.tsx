@@ -8,6 +8,13 @@ import { cn } from '@/lib/utils';
 export interface CarouselImage {
   src: string;
   alt: string;
+  /**
+   * Pre-compressed variants, e.g. '/home/hero-1-640w.webp 640w, … 1280w'.
+   * When set, the slide renders as a plain <img> so the browser picks a
+   * variant directly, instead of routing a large source through
+   * /_next/image and its serverless cold start on every first visit.
+   */
+  srcSet?: string;
 }
 
 interface ImageCarouselProps {
@@ -103,15 +110,28 @@ export function ImageCarousel({
             aria-hidden={i !== index}
             className="relative h-full w-full shrink-0 grow-0 basis-full"
           >
-            <Image
-              src={img.src}
-              alt={img.alt}
-              fill
-              priority={i === 0}
-              loading={i === 0 ? undefined : 'lazy'}
-              className="object-cover"
-              sizes="100vw"
-            />
+            {img.srcSet ? (
+              <img
+                src={img.src}
+                srcSet={img.srcSet}
+                sizes="100vw"
+                alt={img.alt}
+                decoding="async"
+                fetchPriority={i === 0 ? 'high' : 'auto'}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <Image
+                src={img.src}
+                alt={img.alt}
+                fill
+                priority={i === 0}
+                loading={i === 0 ? undefined : 'lazy'}
+                className="object-cover"
+                sizes="100vw"
+              />
+            )}
           </div>
         ))}
       </div>
