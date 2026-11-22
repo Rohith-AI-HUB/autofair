@@ -5,6 +5,7 @@ import { StaffWorkspace } from '@/components/staff/StaffWorkspace';
 export const metadata: Metadata = {
   title: 'Staff Workspace | AutoFair',
   description: 'Assigned vehicle verifications: inspect, rate, price, and publish.',
+  robots: { index: false, follow: false },
 };
 
 export default function StaffPage() {

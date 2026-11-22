@@ -5,6 +5,7 @@ import { AdminDashboard } from '@/components/admin/AdminDashboard';
 export const metadata: Metadata = {
   title: 'Admin Dashboard | AutoFair',
   description: 'Manage inspection staff, monitor workload and upcoming inspections. Assignment is automatic by workload.',
+  robots: { index: false, follow: false },
 };
 
 export default function AdminPage() {

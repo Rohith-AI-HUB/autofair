@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: 'AutoFair — Verified Used Cars. Honest History. Fair Deals.',
   description:
     'Verified used cars with transparent inspection reports, documented history and no hidden surprises. The dossier is public — before you call the seller.',
+  alternates: { canonical: '/' },
 };
 
 export default function HomePage() {

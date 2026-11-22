@@ -44,7 +44,7 @@ export function Footer() {
             <p className="font-mono text-[11px] tracking-[0.08em] text-teal-bright">TRUST</p>
             <ul className="mt-4 space-y-2.5 font-sans text-[13.5px] text-[#D6E2EC]">
               <li><Link className="hover:text-white" href="/inspection">Verification method</Link></li>
-              <li><Link className="hover:text-white" href="/cars/2022-hyundai-creta-sx">Verified report</Link></li>
+              <li><Link className="hover:text-white" href="/cars">Live verified files</Link></li>
               <li><Link className="hover:text-white" href="/inspection">Document checks</Link></li>
             </ul>
           </nav>

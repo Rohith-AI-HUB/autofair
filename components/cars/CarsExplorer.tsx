@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
-import { cars as seedCars } from '@/lib/data/cars';
+import { cars as seedCars, demoCarsAllowed } from '@/lib/data/cars';
 import type { Car } from '@/types';
 import { fetchLiveCars } from '@/lib/supabase/queries';
 import { CarCard } from '@/components/cars/CarCard';
@@ -35,15 +35,15 @@ const yearBands = [
   { label: '2022+', min: 2022 },
 ];
 
-export function CarsExplorer() {
-  // Hydration-safe: first render (server + client) always uses seed. Live cache
-  // + saved city load in effects so back-navigation still feels instant
-  // without SSR text mismatch (6 vs 7 files).
-  const [liveCars, setLiveCars] = useState<Car[] | null>(null);
+export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
+  // The page server-renders the live rows, so first paint (server + client)
+  // already shows real inventory and the effect below only refreshes it.
+  // Seed cars stand in solely on a clone with no Supabase configured.
+  const [liveCars, setLiveCars] = useState<Car[] | null>(initialCars.length ? initialCars : null);
   // Dedupe guard: one card per vehicle id even if live + cache layers overlap
   // or slugs collide. Keyed by id, never slug.
   const cars = useMemo(() => {
-    const pool = liveCars ?? seedCars;
+    const pool = liveCars ?? (demoCarsAllowed ? seedCars : []);
     const seen = new Set<string>();
     return pool.filter((c) => {
       if (seen.has(c.id)) return false;

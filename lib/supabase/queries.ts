@@ -176,6 +176,35 @@ async function refreshLiveCars(): Promise<Car[] | null> {
   }
 }
 
+/**
+ * SEO URL set: every LIVE slug, uncapped. fetchLiveCars() limits to 24 rows for
+ * the browse grid, which would silently truncate the sitemap past 24 listings.
+ */
+export async function fetchLiveListingSlugs(): Promise<{ slug: string; publishedAt: Date | null }[]> {
+  try {
+    const sb = getServerClient();
+    if (!sb) return [];
+    const { data, error } = await sb
+      .from('listings')
+      .select('slug, published_at')
+      .eq('status', 'LIVE')
+      .order('published_at', { ascending: false });
+    if (error) {
+      logDbError('listings.fetchSlugs', error);
+      return [];
+    }
+    return ((data ?? []) as { slug: string | null; published_at: string | null }[])
+      .filter((r): r is { slug: string; published_at: string | null } => Boolean(r.slug))
+      .map((r) => ({
+        slug: r.slug,
+        publishedAt: r.published_at ? new Date(r.published_at) : null,
+      }));
+  } catch (err) {
+    logDbError('listings.fetchSlugs', err);
+    return [];
+  }
+}
+
 export function invalidateLiveCarsCache(): void {
   liveMem = null;
   if (typeof window !== 'undefined') {

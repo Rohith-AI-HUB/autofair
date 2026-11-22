@@ -9,8 +9,10 @@ import { getRoleHome, isPathAllowedForRole } from '@/lib/auth/roles';
 /**
  * Keeps internal users in their one workspace. This is an UX redirect only;
  * every privileged API independently verifies the bearer token and profile role.
- * It renders no customer page while redirecting so an admin/staff user never
- * briefly sees the public/customer interface after typing a URL or using Back.
+ * Children always render: the session lookup only resolves in the browser, so
+ * holding the page for it served every public route to a non-JavaScript crawler
+ * as a placeholder and nothing else. An admin/staff user who types a customer
+ * URL now sees it for one frame before the redirect lands.
  */
 export function RoleRouteGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -23,16 +25,6 @@ export function RoleRouteGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (mustRedirect) router.replace(getRoleHome(role));
   }, [mustRedirect, role, router]);
-
-  // Do not render a customer page before the trusted profile lookup completes:
-  // an admin/staff member arriving at `/` must go straight to their workspace.
-  if (!ready) {
-    return (
-      <div className="mx-auto w-full max-w-[1440px] px-5 py-16 md:px-12" role="status">
-        <p className="font-mono text-[11px] text-muted">CHECKING SESSION…</p>
-      </div>
-    );
-  }
 
   if (mustRedirect) {
     return (

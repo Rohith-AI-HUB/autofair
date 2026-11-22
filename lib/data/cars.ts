@@ -197,6 +197,14 @@ export const cars: Car[] = [
   },
 ];
 
+/**
+ * These dossiers are demos: Unsplash photography and invented registration
+ * plates. They exist so a bare clone renders a page. A deployment wired to
+ * Supabase must never fall back to them, because a buyer cannot tell a demo
+ * from stock that is actually for sale — and Google can index the demo.
+ */
+export const demoCarsAllowed = !process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 export function getCarBySlug(slug: string): Car | undefined {
   return cars.find((c) => c.slug === slug);
 }

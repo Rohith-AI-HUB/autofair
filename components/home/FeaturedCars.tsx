@@ -1,11 +1,11 @@
 import { Container } from '@/components/shared/Container';
 import { CarCard } from '@/components/cars/CarCard';
-import { cars as seedCars } from '@/lib/data/cars';
+import { demoCarsAllowed, cars as seedCars } from '@/lib/data/cars';
 import { fetchLiveCars } from '@/lib/supabase/queries';
 
 export async function FeaturedCars() {
   const live = await fetchLiveCars();
-  const featured = (live?.length ? live : seedCars).slice(0, 4);
+  const featured = (live?.length ? live : demoCarsAllowed ? seedCars : []).slice(0, 4);
   return (
     <section aria-labelledby="featured-heading" className="bg-off-white">
       <Container className="py-16">

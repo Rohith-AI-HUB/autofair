@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { Container } from '@/components/shared/Container';
 import { ContactForm } from '@/components/contact/ContactForm';
+import { CONTACT_EMAIL, CONTACT_PHONE } from '@/lib/seo';
 
 export const metadata: Metadata = {
   title: 'Contact | AutoFair',
   description: 'Talk to a human about a car file. Replies in 1 business day.',
+  alternates: { canonical: '/contact' },
 };
 
 export default function ContactPage() {
@@ -24,8 +26,8 @@ export default function ContactPage() {
           </p>
           <dl className="mt-9 grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3 max-w-[900px]">
             {[
-              ['Email', 'autofaironline.co@gmail.com'],
-              ['Phone · 10–7 IST', '+91 9686413636'],
+              ['Email', CONTACT_EMAIL],
+              ['Phone · 10–7 IST', CONTACT_PHONE],
               ['Yard by appointment', 'CV Raman Nagar,\nBangalore'],
             ].map(([k, v]) => (
               <div key={k} className="min-w-0 border border-line bg-white p-4">

@@ -128,10 +128,10 @@ export function TrustReportPreview() {
             10 — 20 — 30 — 40 — 50 — 60 — 70 — 80 ¦ 82 CHECKS
           </p>
           <Link
-            href="/cars/2022-hyundai-creta-sx"
+            href="/cars"
             className="font-sans text-[13px] font-bold text-teal-bright hover:underline"
           >
-            Open full dossier for AF-2026-008421&nbsp;&nbsp;→
+            Open a live verified dossier&nbsp;&nbsp;→
           </Link>
         </div>
       </Container>

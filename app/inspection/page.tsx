@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: 'Inspection Method | AutoFair',
   description:
     'How AutoFair verifies used cars — on-site checks, document review and honest disclosure. Every file verified.',
+  alternates: { canonical: '/inspection' },
 };
 
 const steps = [
@@ -61,7 +62,7 @@ export default function InspectionPage() {
               0 critical · 2 attention — tyres + exterior touch-up.
             </p>
             <Link
-              href="/cars/2022-hyundai-creta-sx"
+              href="/cars"
               className="mt-5 block bg-teal px-5 py-3 text-center font-sans text-[14px] font-bold text-navy"
             >
               Open verified dossier&nbsp;&nbsp;→

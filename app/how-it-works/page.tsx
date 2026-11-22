@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: 'How It Works | AutoFair',
   description:
     'Buyers read the file before they call. Sellers publish the file before they list. Verification sits in the middle.',
+  alternates: { canonical: '/how-it-works' },
 };
 
 const buyerSteps = [

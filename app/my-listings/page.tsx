@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: 'My Listings | AutoFair',
   description:
     'Every file you published, with live status, views and buyer inquiries. Sign in to open your garage.',
+  robots: { index: false, follow: false },
 };
 
 export default function MyListingsPage() {

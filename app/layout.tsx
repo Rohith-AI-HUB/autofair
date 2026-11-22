@@ -8,6 +8,8 @@ import { AuthModalHost } from '@/components/auth/AuthModalHost';
 import { PhoneGate } from '@/components/auth/PhoneGate';
 import { RoleRouteGate } from '@/components/auth/RoleRouteGate';
 import { Analytics } from "@vercel/analytics/next";
+import { SITE_NAME, SITE_URL } from '@/lib/seo';
+import { jsonLd, organizationJsonLd, websiteJsonLd } from '@/lib/seo-jsonld';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -24,18 +26,31 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: 'AutoFair — Verified Used Cars. Honest History. Fair Deals.',
   description:
     'Verified used cars with transparent inspection reports, documented history and no hidden surprises. The dossier is public — before you call the seller.',
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
   },
+  // No `alternates.canonical` or `openGraph.url` here: unset metadata fields
+  // inherit from the parent segment, so a canonical in this file would point
+  // every route on the site at the homepage. Each page sets its own.
   openGraph: {
+    type: 'website',
+    siteName: SITE_NAME,
+    locale: 'en_IN',
     title: 'AutoFair — Verified Used Cars. Honest History. Fair Deals.',
     description:
       'Know the car before you buy it. Inspection file, documents and history upfront.',
-    type: 'website',
   },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'AutoFair — Verified Used Cars. Honest History. Fair Deals.',
+    description:
+      'Know the car before you buy it. Inspection file, documents and history upfront.',
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -50,6 +65,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </RoleRouteGate>
         <AuthModalHost />
         <PhoneGate />
+        <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(organizationJsonLd())} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(websiteJsonLd())} />
         <Analytics />
       </body>
     </html>

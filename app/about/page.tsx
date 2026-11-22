@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: 'About | AutoFair',
   description:
     'Used-car buying should not feel like detective work. AutoFair publishes the inspection file before you call the seller.',
+  alternates: { canonical: '/about' },
 };
 
 const principles = [

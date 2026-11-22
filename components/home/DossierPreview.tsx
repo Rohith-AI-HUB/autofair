@@ -31,7 +31,7 @@ export function DossierPreview() {
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <p className="font-mono text-[12px] text-navy">OVERALL&nbsp;&nbsp;8.7 / 10</p>
             <Link
-              href="/cars/2022-hyundai-creta-sx"
+              href="/cars"
               className="font-sans text-[14px] font-bold text-navy hover:underline"
             >
               Open full dossier&nbsp;&nbsp;→
@@ -59,7 +59,7 @@ export function DossierPreview() {
               ))}
             </dl>
             <Link
-              href="/cars/2022-hyundai-creta-sx"
+              href="/cars"
               className="mt-6 block bg-teal px-5 py-3 text-center font-sans text-[14px] font-bold text-navy hover:bg-[#12a295]"
             >
               Open verified dossier&nbsp;&nbsp;→

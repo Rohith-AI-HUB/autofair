@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { Car } from '@/types';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Container } from '@/components/shared/Container';
@@ -7,16 +8,32 @@ import { VehicleSummary } from '@/components/cars/VehicleSummary';
 import { TrustReport } from '@/components/cars/TrustReport';
 import { CarCard } from '@/components/cars/CarCard';
 import { ViewCounter } from '@/components/cars/ViewCounter';
-import { cars, getCarBySlug } from '@/lib/data/cars';
+import { cars, demoCarsAllowed, getCarBySlug } from '@/lib/data/cars';
 import { carTitle } from '@/lib/data/car-names';
-import { fetchCarBySlugFromDb, fetchLiveCars } from '@/lib/supabase/queries';
+import { fetchCarBySlugFromDb, fetchLiveCars, fetchLiveListingSlugs } from '@/lib/supabase/queries';
+import { absoluteUrl } from '@/lib/seo';
+import { breadcrumbJsonLd, jsonLd, vehicleProductJsonLd } from '@/lib/seo-jsonld';
 
 // DB rows can change without a deploy (photos added later, price at
 // verification), so never serve the build-time snapshot indefinitely.
 export const revalidate = 60;
 
+/**
+ * Resolves a dossier and records whether it is demo content. `getCarBySlug`
+ * only knows the seed list in lib/data/cars.ts, so a hit there with no DB row
+ * is an Unsplash-backed sample car, not a vehicle anyone is selling.
+ */
+async function resolveCar(slug: string): Promise<{ car: Car | undefined; isDemo: boolean }> {
+  const fromDb = await fetchCarBySlugFromDb(slug);
+  if (fromDb) return { car: fromDb, isDemo: false };
+  return { car: getCarBySlug(slug), isDemo: true };
+}
+
 export async function generateStaticParams() {
-  return cars.map((c) => ({ slug: c.slug }));
+  // Prerender the real inventory. The seed slugs used to come from here, which
+  // put six sample cars on the production index while actual listings did not.
+  const live = await fetchLiveListingSlugs();
+  return live.map(({ slug }) => ({ slug }));
 }
 
 export async function generateMetadata({
@@ -25,11 +42,24 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const car = (await fetchCarBySlugFromDb(slug)) ?? getCarBySlug(slug);
-  if (!car) return { title: 'Not found | AutoFair' };
+  const { car, isDemo } = await resolveCar(slug);
+  if (!car) return { title: 'Not found | AutoFair', robots: { index: false, follow: false } };
+  const title = `${carTitle(car)} | AutoFair`;
+  const description = `${carTitle(car)} — ${car.inspectionId}. Verified dossier with inspection, documents and disclosed history.`;
   return {
-    title: `${carTitle(car)} | AutoFair`,
-    description: `${carTitle(car)} — ${car.inspectionId}. Verified dossier with inspection, documents and disclosed history.`,
+    title,
+    description,
+    alternates: { canonical: `/cars/${car.slug}` },
+    openGraph: {
+      type: 'website',
+      title,
+      description,
+      url: absoluteUrl(`/cars/${car.slug}`),
+      images: car.images.map((src) => ({ url: absoluteUrl(src) })),
+    },
+    // Sample dossiers stay reachable from the marketing previews but must never
+    // rank: they advertise a car that is not for sale.
+    robots: isDemo ? { index: false, follow: true } : { index: true, follow: true },
   };
 }
 
@@ -39,11 +69,11 @@ export default async function CarDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const car = (await fetchCarBySlugFromDb(slug)) ?? getCarBySlug(slug);
+  const { car, isDemo } = await resolveCar(slug);
   if (!car) notFound();
 
   const liveRelated = await fetchLiveCars();
-  const pool = liveRelated?.length ? liveRelated : cars;
+  const pool = liveRelated?.length ? liveRelated : demoCarsAllowed ? cars : [];
   const seen = new Set<string>([car.slug]);
   const related = pool.filter((c) => {
     if (c.slug === car.slug || seen.has(c.slug)) return false;
@@ -53,6 +83,18 @@ export default async function CarDetailPage({
 
   return (
     <Container className="pb-16 pt-8">
+      {!isDemo ? (
+        <>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={jsonLd(vehicleProductJsonLd(car))}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={jsonLd(breadcrumbJsonLd(car))}
+          />
+        </>
+      ) : null}
       <ViewCounter slug={slug} />
       <nav aria-label="Breadcrumb">
         <Link href="/cars" className="font-sans text-[13px] font-bold text-navy hover:underline">
