@@ -788,7 +788,7 @@ const TRANSMISSION_OPTIONS = ['Manual', 'Automatic', 'AMT', 'CVT'];
           ))}
         </dl>
         <p className="shrink-0 font-sans text-[13px] leading-relaxed text-[#D6E2EC] lg:max-w-[280px]">
-          Tip: files with full 82/82 checks get 3× more inquiries.
+          Every check is shown to buyers by name, with your verifier's note against it.
         </p>
       </section>
 

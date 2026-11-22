@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Container } from '@/components/shared/Container';
+import { PROTOCOL } from '@/lib/data/inspections';
 
 export const metadata: Metadata = {
   title: 'How It Works | AutoFair',
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 const buyerSteps = [
   { n: '01', t: 'Discover', d: 'Shortlist by city, budget and body type. Every thumb shows verification state.' },
   { n: '02', t: 'Compare', d: 'Price against km, owners and condition score — not photos alone.' },
-  { n: '03', t: 'Review verification', d: 'Open the dossier: 82 checks, documents, accident disclosure.' },
+  { n: '03', t: 'Review verification', d: `Open the dossier: ${PROTOCOL.total} checks, documents, accident disclosure.` },
   { n: '04', t: 'Contact seller', d: 'Only after the file reads clean. Quote the Inspection ID.' },
   { n: '05', t: 'Inspect / test drive', d: 'Verify the car matches the file on road and ramp.' },
   { n: '06', t: 'Purchase', d: 'Paperwork with the same IDs you reviewed. No surprises.' },
@@ -21,7 +22,7 @@ const buyerSteps = [
 const sellerSteps = [
   { n: '01', t: 'Submit vehicle', d: 'Reg number, make, model, km and photos.' },
   { n: '02', t: 'Provide documents', d: 'RC, insurance, service and challan set.' },
-  { n: '03', t: 'Verification', d: '82 checks on-site + record cross-checks.' },
+  { n: '03', t: 'Verification', d: `${PROTOCOL.total} checks on-site + record cross-checks.` },
   { n: '04', t: 'Approval', d: 'Quality gate. Fixes or disclosures added.' },
   { n: '05', t: 'Publish listing', d: 'Dossier goes public with the car.' },
   { n: '06', t: 'Connect with buyers', d: 'Buyers arrive quoting your Inspection ID.' },

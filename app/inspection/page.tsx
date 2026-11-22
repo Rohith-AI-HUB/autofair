@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import { Container } from '@/components/shared/Container';
 import { InspectionBreakdown } from '@/components/inspection/InspectionBreakdown';
-import { verifiedInspection } from '@/lib/data/inspections';
+import { PROTOCOL, verifiedInspection } from '@/lib/data/inspections';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Inspection Method | AutoFair',
   description:
-    'How AutoFair verifies used cars — on-site checks, document review and honest disclosure. Every file verified.',
+    `How AutoFair verifies used cars — the same ${PROTOCOL.total} checks across ` +
+    `${PROTOCOL.sections} sections on every file, plus document review and honest disclosure.`,
   alternates: { canonical: '/inspection' },
 };
 
@@ -30,9 +31,10 @@ export default function InspectionPage() {
             The file before the phone call.
           </h1>
           <p className="mt-4 max-w-[620px] font-sans text-[15px] leading-relaxed text-muted">
-            Every AutoFair listing carries the same dossier structure — checks,
-            documents and history. Below is a verified report (AF-2026-008421).
-            Files publish only after physical verification.
+            Every AutoFair listing carries the same dossier structure — {PROTOCOL.total} checks
+            filed under {verifiedInspection.length} sections, plus documents and history. The
+            sample below shows that structure with the wording our verifiers use. Files publish
+            only after physical verification. Live files are at <Link href="/cars" className="font-semibold text-navy hover:underline">/cars</Link>.
           </p>
           <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {steps.map((s) => (
@@ -44,8 +46,8 @@ export default function InspectionPage() {
             ))}
           </div>
           <p className="mt-4 font-mono text-[10px] text-muted">
-            We do not claim fixed point-counts or guarantees unless shown in the file.
-            What you see in the dossier is what was checked.
+            Every listing records the same {PROTOCOL.total} checks. Where one needs attention it is
+            written into the file with a note. We publish the record, not a guarantee.
           </p>
         </Container>
       </section>
@@ -53,13 +55,13 @@ export default function InspectionPage() {
       <section className="bg-off-white">
         <Container className="grid gap-6 py-12 lg:grid-cols-[360px_1fr]">
           <aside className="h-fit bg-navy p-6 text-white">
-            <p className="font-mono text-[10.5px] text-teal-bright">VERIFIED REPORT</p>
-            <p className="mt-2 font-sans text-[36px] font-extrabold">8.7 / 10</p>
+            <p className="font-mono text-[10.5px] text-teal-bright">SAMPLE FILE&nbsp;&nbsp;•&nbsp;&nbsp;STRUCTURE, NOT A CAR</p>
+            <p className="mt-2 font-sans text-[36px] font-extrabold">{PROTOCOL.total} CHECKS</p>
             <p className="mt-2 font-mono text-[11px] text-[#9FB2C5]">
-              AF-2026-008421&nbsp;&nbsp;•&nbsp;&nbsp;82 / 82 DONE
+              {PROTOCOL.sections} SECTIONS&nbsp;&nbsp;•&nbsp;&nbsp;{PROTOCOL.passed} / {PROTOCOL.total} RECORDED
             </p>
             <p className="mt-3 font-sans text-[13px] text-[#D6E2EC]">
-              0 critical · 2 attention — tyres + exterior touch-up.
+              {`0 critical · ${PROTOCOL.flagged.length} attention — ${PROTOCOL.flagged.join(' + ').toLowerCase()}.`}
             </p>
             <Link
               href="/cars"

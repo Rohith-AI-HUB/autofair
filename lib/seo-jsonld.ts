@@ -26,6 +26,17 @@ function property(name: string, value: number | string) {
   return { '@type': 'PropertyValue', name, value };
 }
 
+/**
+ * `inspections.inspected_at` is null on every live row, so published_at is the
+ * only date that can be claimed. It is never later than a real change: photos
+ * and corrections appended after publishing keep the earlier date.
+ */
+function dates(car: Car) {
+  if (!car.publishedAt) return {};
+  const iso = new Date(car.publishedAt).toISOString();
+  return { datePublished: iso, dateModified: iso };
+}
+
 export function vehicleProductJsonLd(car: Car) {
   const url = absoluteUrl(`/cars/${car.slug}`);
   return {
@@ -40,6 +51,7 @@ export function vehicleProductJsonLd(car: Car) {
     brand: { '@type': 'Brand', name: car.make },
     image: car.images.map(absoluteUrl),
     url,
+    ...dates(car),
     offers: offer(car),
     additionalProperty: [
       property('Year of manufacture', car.year),

@@ -54,6 +54,10 @@ export function Footer() {
           <p className="font-sans text-[12px] text-[#5C738A]">
             © 2026 AutoFair.online&nbsp;&nbsp;
           </p>
+          <nav aria-label="Legal" className="flex gap-5 font-sans text-[12px] text-[#5C738A]">
+            <Link className="hover:text-white" href="/privacy-policy">Privacy Policy</Link>
+            <Link className="hover:text-white" href="/terms">Terms of Use</Link>
+          </nav>
         </div>
       </div>
     </footer>

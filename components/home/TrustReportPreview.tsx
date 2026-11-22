@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PROTOCOL, verifiedInspection } from '@/lib/data/inspections';
 import { Container } from '@/components/shared/Container';
 
 export function TrustReportPreview() {
@@ -7,11 +8,11 @@ export function TrustReportPreview() {
       <Container className="py-16">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="font-mono text-[11px] tracking-[0.06em] text-teal-bright">
-            03 — LAB SHEET&nbsp;&nbsp;•&nbsp;&nbsp;VERIFIED REPORT AF-2026-008421
+            03 — LAB SHEET&nbsp;&nbsp;•&nbsp;&nbsp;SAMPLE FILE, STRUCTURE ONLY
           </p>
           <div className="flex items-center gap-4">
             <p className="font-mono text-[11px] text-[#9FB2C5]">
-              KA-05-MN-4218&nbsp;&nbsp;•&nbsp;&nbsp;10 SEP 2026
+              {PROTOCOL.total} CHECKS&nbsp;&nbsp;•&nbsp;&nbsp;{PROTOCOL.sections} SECTIONS
             </p>
             <span className="border border-teal/60 px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-teal-bright">
               ● VERIFIED
@@ -28,8 +29,8 @@ export function TrustReportPreview() {
               Before you buy, see what we found.
             </h2>
             <p className="mt-3 max-w-[560px] font-sans text-[15px] leading-relaxed text-[#9FB2C5]">
-              Pulled from the live inspection file — condition, checks and documents on one
-              sheet. No showroom talk.
+              The shape of every AutoFair file — condition, checks and documents on one sheet,
+              with the wording our verifiers use. No showroom talk.
             </p>
           </div>
           <div className="flex items-center gap-4 border border-white/10 bg-navy-2 px-6 py-5">
@@ -83,18 +84,20 @@ export function TrustReportPreview() {
                 INSPECTION
               </p>
               <span className="bg-navy px-2 py-1 font-mono text-[10.5px] text-white">
-                82 / 82 DONE
+                {PROTOCOL.passed} / {PROTOCOL.total} DONE
               </span>
             </div>
-            <p className="mt-4 font-sans text-[42px] font-extrabold leading-none">82 / 82</p>
+            <p className="mt-4 font-sans text-[42px] font-extrabold leading-none">
+              {PROTOCOL.passed} / {PROTOCOL.total}
+            </p>
             <div className="mt-3 h-2 w-full bg-[#E8ECEA]" aria-hidden>
-              <div className="h-2 w-[92%] bg-teal" />
+              <div className="h-2 bg-teal" style={{ width: `${Math.round((PROTOCOL.passed / PROTOCOL.total) * 100)}%` }} />
             </div>
             <p className="mt-3 font-sans text-[13px] font-semibold">
-              0 critical · 2 attention — tyres + exterior touch-up.
+              {`0 critical · ${PROTOCOL.flagged.length} attention — ${PROTOCOL.flagged.join(' + ').toLowerCase()}.`}
             </p>
             <p className="mt-2 font-mono text-[10.5px] text-muted">
-              ENG 14 · BRK 8 · SUSP 9 · ELEC 10 · DOCS 5
+              {PROTOCOL.sections} SECTIONS · {PROTOCOL.total} CHECKS · NOTE ON EVERY ITEM
             </p>
           </div>
 
@@ -118,14 +121,14 @@ export function TrustReportPreview() {
               Service ✓&nbsp;&nbsp;&nbsp;Challans ✓&nbsp;&nbsp;&nbsp;HSRP ✓
             </p>
             <p className="mt-3 font-mono text-[10.5px] text-[#7A8DA0]">
-              Reviewed 09 SEP 2026 · Next PUC FEB 2027
+              Every real file carries its own review date and notes
             </p>
           </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 md:flex-row md:items-center md:justify-between">
           <p className="font-mono text-[10px] tracking-[0.04em] text-[#5C738A]">
-            10 — 20 — 30 — 40 — 50 — 60 — 70 — 80 ¦ 82 CHECKS
+            {verifiedInspection.map((c) => `${c.total}`).join(' — ')} ¦ {PROTOCOL.total} CHECKS ACROSS {PROTOCOL.sections} SECTIONS
           </p>
           <Link
             href="/cars"

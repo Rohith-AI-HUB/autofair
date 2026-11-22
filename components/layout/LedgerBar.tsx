@@ -57,15 +57,18 @@ export function LedgerBar() {
       })()
     : 'FIELD DOSSIER  ●  LIVE STOCK';
 
-  const rightId = live?.[0]?.inspectionId ?? 'AF-2026-008421';
-  const rightTime = now ? formatIST(now) : '10 SEP 2026  14:32 IST';
+  // No invented stamp: before the live rows arrive (or if there are none) there
+  // is no file to quote, so the slot stays empty.
+  const stamp = [live?.[0]?.inspectionId, now ? formatIST(now) : null]
+    .filter(Boolean)
+    .join('  •  ');
 
   return (
     <div className="bg-navy">
       <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-5 py-[9px] md:px-12">
         <p className="font-mono text-[10px] tracking-[0.04em] text-teal-bright">{left}</p>
         <p className="hidden font-mono text-[10px] tracking-[0.04em] text-[#D6E2EC] sm:block">
-          {rightId}  •  {rightTime}
+          {stamp || ' '}
         </p>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PROTOCOL } from '@/lib/data/inspections';
 import { Container } from '@/components/shared/Container';
 
 export function Hero() {
@@ -21,7 +22,7 @@ export function Hero() {
             hidden surprises. The dossier is public — before you call the seller.
           </p>
           <p className="mt-4 font-mono text-[11px] tracking-[0.06em] text-muted">
-            82 CHECKS&nbsp;&nbsp;•&nbsp;&nbsp;5-STEP APPROVAL&nbsp;&nbsp;•&nbsp;&nbsp;DISCLOSED,
+            {PROTOCOL.total} CHECKS&nbsp;&nbsp;•&nbsp;&nbsp;5-STEP APPROVAL&nbsp;&nbsp;•&nbsp;&nbsp;DISCLOSED,
             NOT PROMISED
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-5">

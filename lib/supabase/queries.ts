@@ -91,6 +91,7 @@ export function dbToCar(
     sections: report?.sections,
     isSample: false,
     inspectedAt: report?.inspectedAt ?? null,
+    publishedAt: listing?.published_at ?? null,
     inspectorNote: report?.inspectorNote ?? '',
     accidentNote: report?.accidentNote ?? '',
     docsNote: report?.docsNote ?? '',

@@ -34,6 +34,8 @@ export interface Car {
   sections?: InspectionCategory[];
   isSample?: boolean;
   inspectedAt?: string | null;
+  /** listings.published_at — the only trustworthy "since" date a dossier has. */
+  publishedAt?: string | null;
   inspectorNote?: string;
   accidentNote?: string;
   docsNote?: string;

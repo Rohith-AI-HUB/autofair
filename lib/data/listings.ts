@@ -18,7 +18,7 @@ export interface Listing {
   spec: string;
   inspectionId: string;
   status: ListingStatus;
-  /** e.g. "✓ 82/82 CHECKS  •  1.2k views  •  14 inquiries" */
+  /** e.g. "✓ 19/19 CHECKS  •  1.2k views  •  14 inquiries" */
   meta: string;
   metaTone: 'teal' | 'muted';
   views: string;
@@ -43,7 +43,7 @@ export const listings: Listing[] = [
     spec: '2022  •  PETROL  •  28K KM  •  KA-05-MN-4218',
     inspectionId: 'AF-2026-008421',
     status: 'LIVE',
-    meta: '✓ 82/82 CHECKS  •  1.2k views  •  14 inquiries',
+    meta: '✓ 19/19 CHECKS  •  1.2k views  •  14 inquiries',
     metaTone: 'teal',
     views: '1.2k views',
     viewsNum: 1200,

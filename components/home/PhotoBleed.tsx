@@ -1,4 +1,5 @@
 import { ImageCarousel } from '@/components/shared/ImageCarousel';
+import { PROTOCOL } from '@/lib/data/inspections';
 
 const PHOTOS = [
   {
@@ -37,7 +38,7 @@ export function PhotoBleed() {
             </div>
             <ul className="mt-4 space-y-3">
               {[
-                'Inspection completed — 82 / 82',
+                `Inspection completed — ${PROTOCOL.total} / ${PROTOCOL.total}`,
                 'Documents reviewed — RC · Insurance',
                 'Accident history disclosed',
                 'Listing approved — 10 Sep 2026',
@@ -51,7 +52,7 @@ export function PhotoBleed() {
               ))}
             </ul>
             <p className="mt-5 border-t border-white/10 pt-4 font-mono text-[11px] tracking-[0.04em] text-[#9FB2C5]">
-              INSPECTION ID&nbsp;&nbsp;AF-2026-008421&nbsp;&nbsp;•&nbsp;&nbsp;FIG.01
+              SAMPLE FILE&nbsp;&nbsp;•&nbsp;&nbsp;FIG.01
             </p>
           </div>
         </div>

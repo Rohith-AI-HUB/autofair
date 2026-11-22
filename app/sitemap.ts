@@ -14,13 +14,15 @@ const PUBLIC_PATHS: { path: string; priority: number; changeFrequency: 'daily' |
   { path: 'how-it-works', priority: 0.6, changeFrequency: 'monthly' },
   { path: 'about', priority: 0.5, changeFrequency: 'monthly' },
   { path: 'contact', priority: 0.5, changeFrequency: 'monthly' },
+  { path: 'privacy-policy', priority: 0.3, changeFrequency: 'monthly' },
+  { path: 'terms', priority: 0.3, changeFrequency: 'monthly' },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
+  // The static pages only change on deploy, so they get no lastmod: Google
+  // checks it against the page and stops trusting a sitemap that overstates it.
   const statics: MetadataRoute.Sitemap = PUBLIC_PATHS.map(({ path, priority, changeFrequency }) => ({
     url: `${SITE_URL}/${path}`,
-    lastModified: now,
     changeFrequency,
     priority,
   }));
@@ -30,7 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const dossiers: MetadataRoute.Sitemap = (await fetchLiveListingSlugs()).map(
     ({ slug, publishedAt }) => ({
       url: `${SITE_URL}/cars/${slug}`,
-      lastModified: publishedAt ?? now,
+      ...(publishedAt ? { lastModified: publishedAt } : {}),
       changeFrequency: 'daily',
       priority: 0.8,
     }),

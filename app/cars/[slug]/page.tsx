@@ -8,7 +8,7 @@ import { VehicleSummary } from '@/components/cars/VehicleSummary';
 import { TrustReport } from '@/components/cars/TrustReport';
 import { CarCard } from '@/components/cars/CarCard';
 import { ViewCounter } from '@/components/cars/ViewCounter';
-import { cars, demoCarsAllowed, getCarBySlug } from '@/lib/data/cars';
+import { cars, demoCarsAllowed, formatKm, formatPrice, getCarBySlug } from '@/lib/data/cars';
 import { carTitle } from '@/lib/data/car-names';
 import { fetchCarBySlugFromDb, fetchLiveCars, fetchLiveListingSlugs } from '@/lib/supabase/queries';
 import { absoluteUrl } from '@/lib/seo';
@@ -44,8 +44,14 @@ export async function generateMetadata({
   const { slug } = await params;
   const { car, isDemo } = await resolveCar(slug);
   if (!car) return { title: 'Not found | AutoFair', robots: { index: false, follow: false } };
-  const title = `${carTitle(car)} | AutoFair`;
-  const description = `${carTitle(car)} — ${car.inspectionId}. Verified dossier with inspection, documents and disclosed history.`;
+  // The visible H1 stays the bare car name (car naming policy renders stored data
+  // as-is). Only the SERP string carries price and city, which is what buyers
+  // actually filter on ("used BMW 520d Bangalore price").
+  const title = `${carTitle(car)} — ${formatPrice(car.price)}, ${car.location} | AutoFair`;
+  const description =
+    `${formatPrice(car.price)} • ${car.year} • ${car.fuel} • ${car.transmission} • ` +
+    `${formatKm(car.mileageKm)} • ${car.ownership} • ${car.location}. ` +
+    `Verified dossier ${car.inspectionId}: checks, documents and accident disclosure.`;
   return {
     title,
     description,

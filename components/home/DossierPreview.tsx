@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Container } from '@/components/shared/Container';
 import { InspectionBreakdown } from '@/components/inspection/InspectionBreakdown';
-import { verifiedInspection } from '@/lib/data/inspections';
+import { PROTOCOL, verifiedInspection } from '@/lib/data/inspections';
 
 export function DossierPreview() {
   return (
@@ -11,7 +11,7 @@ export function DossierPreview() {
           <div className="max-w-[700px]">
             <div className="flex flex-wrap items-center gap-3">
               <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
-                04 — FULL DOSSIER&nbsp;&nbsp;•&nbsp;&nbsp;AF-2026-008421
+                04 — SAMPLE DOSSIER&nbsp;&nbsp;•&nbsp;&nbsp;STRUCTURE, NOT A LIVE FILE
               </p>
               <span className="border border-teal/60 px-2 py-[2px] font-mono text-[10px] text-teal-dark">
                 VERIFIED
@@ -24,8 +24,9 @@ export function DossierPreview() {
               See the inspection, not just the car.
             </h2>
             <p className="mt-2 max-w-[560px] font-sans text-[14px] leading-relaxed text-muted">
-              Eight systems. Every check with result, note and photo in the full file.
-              Preview below is verified data.
+              {PROTOCOL.sections} sections, {PROTOCOL.total} checks. In a real file each one
+              carries a result and the verifier's note, with a photo where it matters. The
+              preview below shows the structure in sample wording — the live files are real.
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">

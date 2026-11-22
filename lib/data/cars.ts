@@ -29,7 +29,7 @@ export const cars: Car[] = [
     },
     verification: {
       verified: true,
-      inspection: '82 / 82 DONE',
+      inspection: '19 / 19 DONE',
       documents: 'VERIFIED',
       accidentHistory: 'CLEAR',
     },
@@ -61,7 +61,7 @@ export const cars: Car[] = [
     },
     verification: {
       verified: true,
-      inspection: '82 / 82 DONE',
+      inspection: '19 / 19 DONE',
       documents: 'VERIFIED',
       accidentHistory: 'CLEAR',
     },
@@ -93,7 +93,7 @@ export const cars: Car[] = [
     },
     verification: {
       verified: true,
-      inspection: '80 / 82 DONE',
+      inspection: '18 / 19 DONE',
       documents: 'VERIFIED',
       accidentHistory: 'DISCLOSED',
     },
@@ -125,7 +125,7 @@ export const cars: Car[] = [
     },
     verification: {
       verified: true,
-      inspection: '82 / 82 DONE',
+      inspection: '19 / 19 DONE',
       documents: '1 PENDING',
       accidentHistory: 'CLEAR',
     },
@@ -158,7 +158,7 @@ export const cars: Car[] = [
     },
     verification: {
       verified: true,
-      inspection: '78 / 82 DONE',
+      inspection: '17 / 19 DONE',
       documents: 'VERIFIED',
       accidentHistory: 'DISCLOSED',
     },
@@ -190,7 +190,7 @@ export const cars: Car[] = [
     },
     verification: {
       verified: true,
-      inspection: '82 / 82 DONE',
+      inspection: '19 / 19 DONE',
       documents: 'VERIFIED',
       accidentHistory: 'CLEAR',
     },
