@@ -65,7 +65,7 @@ export function DossierPreview() {
             >
               Open verified dossier&nbsp;&nbsp;→
             </Link>
-            <p className="mt-3 font-mono text-[10px] leading-relaxed text-[#5C738A]">
+            <p className="mt-3 font-mono text-[10px] leading-relaxed text-[#9FB2C5]">
               Verified data. Files publish after physical verification.
             </p>
           </aside>

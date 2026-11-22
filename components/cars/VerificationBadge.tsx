@@ -11,7 +11,7 @@ export function VerificationBadge({
 }) {
   const tones: Record<string, string> = {
     ok: 'bg-teal/15 text-teal-dark',
-    warn: 'bg-amber/20 text-[#8A6D1B]',
+    warn: 'bg-amber/20 text-[#6d5413]',
     dark: 'bg-navy text-white',
     amber: 'bg-amber text-navy',
   };

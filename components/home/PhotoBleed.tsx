@@ -3,15 +3,15 @@ import { PROTOCOL } from '@/lib/data/inspections';
 
 const PHOTOS = [
   {
-    src: 'https://images.unsplash.com/photo-1781197824875-c6e07188896b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800',
+    src: '/home/hero-1.jpg',
     alt: '2022 Hyundai Creta SX — KA-05-MN-4218 in Bangalore, front three-quarter view',
   },
   {
-    src: 'https://images.unsplash.com/photo-1670122872487-8fea1dd1c08c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800',
+    src: '/home/hero-2.jpg',
     alt: '2022 Hyundai Creta SX — side profile showing verified exterior condition',
   },
   {
-    src: 'https://images.unsplash.com/photo-1609831489866-3a2fe235f093?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1800',
+    src: '/home/hero-3.jpg',
     alt: '2022 Hyundai Creta SX — rear view with number plate region documented',
   },
 ];

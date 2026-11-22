@@ -136,11 +136,16 @@ export function ImageCarousel({
                 onClick={() => goTo(i)}
                 aria-label={`Go to photo ${i + 1}`}
                 aria-current={i === visible}
-                className={cn(
-                  'h-2 w-2 rounded-full',
-                  i === visible ? 'bg-amber' : 'bg-white/50 hover:bg-white'
-                )}
-              />
+                className="group flex h-6 w-6 items-center justify-center"
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    'h-2 w-2 rounded-full transition-colors group-hover:bg-white',
+                    i === visible ? 'bg-amber' : 'bg-white/50'
+                  )}
+                />
+              </button>
             ))}
           </div>
 

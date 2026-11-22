@@ -8,7 +8,7 @@ export function InspectionItem({ item }: { item: Item }) {
       <span
         className={cn(
           'font-sans text-[12px]',
-          item.result === 'pass' ? 'text-teal-dark' : 'text-[#8A6D1B]'
+          item.result === 'pass' ? 'text-teal-dark' : 'text-[#6d5413]'
         )}
       >
         {item.result === 'pass' ? '✓  Good — ' : '⚠  Attention — '}

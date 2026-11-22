@@ -34,12 +34,12 @@ export function InspectionCategoryRow({
             <span
               className={cn(
                 'font-mono text-[11px]',
-                isAttention ? 'text-[#8A6D1B]' : 'text-teal-dark'
+                isAttention ? 'text-[#6d5413]' : 'text-teal-dark'
               )}
             >
               {category.passed} / {category.total}
             </span>
-            <span aria-hidden className="font-sans text-[16px] text-[#999]">
+            <span aria-hidden className="font-sans text-[16px] text-muted">
               {open ? '▾' : '›'}
             </span>
           </span>
@@ -66,7 +66,7 @@ export function InspectionCategoryRow({
                   <span
                     className={cn(
                       'font-sans text-[12px]',
-                      item.result === 'pass' ? 'text-teal-dark' : 'text-[#8A6D1B]'
+                      item.result === 'pass' ? 'text-teal-dark' : 'text-[#6d5413]'
                     )}
                   >
                     {item.result === 'pass' ? '✓  Good — ' : '⚠  Attention — '}

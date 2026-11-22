@@ -120,14 +120,14 @@ export function TrustReportPreview() {
             <p className="mt-1 font-mono text-[11px] text-[#D6E2EC]">
               Service ✓&nbsp;&nbsp;&nbsp;Challans ✓&nbsp;&nbsp;&nbsp;HSRP ✓
             </p>
-            <p className="mt-3 font-mono text-[10.5px] text-[#7A8DA0]">
+            <p className="mt-3 font-mono text-[10.5px] text-[#9FB2C5]">
               Every real file carries its own review date and notes
             </p>
           </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 md:flex-row md:items-center md:justify-between">
-          <p className="font-mono text-[10px] tracking-[0.04em] text-[#5C738A]">
+          <p className="font-mono text-[10px] tracking-[0.04em] text-[#9FB2C5]">
             {verifiedInspection.map((c) => `${c.total}`).join(' — ')} ¦ {PROTOCOL.total} CHECKS ACROSS {PROTOCOL.sections} SECTIONS
           </p>
           <Link

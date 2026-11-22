@@ -198,7 +198,7 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search make, model, location, inspection ID…"
-            className="w-full bg-transparent font-sans text-[14px] text-navy outline-none placeholder:text-[#999]"
+            className="w-full bg-transparent font-sans text-[14px] text-navy outline-none placeholder:text-muted"
           />
           {query && (
             <button

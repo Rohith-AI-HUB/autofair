@@ -14,7 +14,7 @@ export function CarCard({
   const num = String(index + 1).padStart(2, '0');
   return (
     <article className="flex flex-col gap-4 border border-line bg-white p-4 sm:flex-row sm:items-center md:p-5">
-      <p className="font-mono text-[13px] text-[#999]" aria-hidden>
+      <p className="font-mono text-[13px] text-muted" aria-hidden>
         {num}
       </p>
       <Link
@@ -52,6 +52,7 @@ export function CarCard({
       </div>
       <Link
         href={`/cars/${car.slug}`}
+        aria-label={`Open file for ${carTitle(car)}`}
         className="inline-flex shrink-0 items-center justify-center bg-navy px-5 py-3 font-sans text-[13px] font-bold text-white hover:bg-navy-2"
       >
         Open file →

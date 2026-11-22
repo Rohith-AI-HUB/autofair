@@ -51,10 +51,10 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col gap-2 border-t border-line-dark pt-5 md:flex-row md:items-center md:justify-between">
-          <p className="font-sans text-[12px] text-[#5C738A]">
+          <p className="font-sans text-[12px] text-[#9FB2C5]">
             © 2026 AutoFair.online&nbsp;&nbsp;
           </p>
-          <nav aria-label="Legal" className="flex gap-5 font-sans text-[12px] text-[#5C738A]">
+          <nav aria-label="Legal" className="flex gap-5 font-sans text-[12px] text-[#9FB2C5]">
             <Link className="hover:text-white" href="/privacy-policy">Privacy Policy</Link>
             <Link className="hover:text-white" href="/terms">Terms of Use</Link>
           </nav>
