@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import { Container } from '@/components/shared/Container';
+import { ContactForm } from '@/components/contact/ContactForm';
+import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_E164, FOUNDER } from '@/lib/seo';
+import { founderJsonLd, jsonLd } from '@/lib/seo-jsonld';
 
 export const metadata: Metadata = {
   title: 'About | AutoFair',
   description:
-    'Used-car buying should not feel like detective work. AutoFair publishes the inspection file before you call the seller.',
+    'Used-car buying should not feel like detective work. AutoFair publishes the inspection file before you call the seller. Email, phone and the enquiry form are on this page.',
   alternates: { canonical: '/about' },
 };
 
@@ -98,6 +102,95 @@ export default function AboutPage() {
               </div>
             ))}
           </div>
+        </Container>
+      </section>
+
+      <section id="founder" className="scroll-mt-20 bg-white">
+        <Container className="py-14">
+          <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
+            WHO RUNS AUTOFAIR
+          </p>
+          <div className="mt-6 grid items-start gap-8 md:grid-cols-[164px_1fr]">
+            <div className="relative h-[164px] w-[164px] overflow-hidden bg-navy">
+              <Image
+                src="/founder-keerthivanth.jpg"
+                alt={`${FOUNDER.name}, founder of AutoFair`}
+                fill
+                sizes="164px"
+                className="object-cover"
+              />
+            </div>
+            <div>
+              <h2 className="font-sans text-[28px] font-extrabold leading-tight text-navy md:text-[34px]">
+                {FOUNDER.name}
+              </h2>
+              <p className="mt-1 font-mono text-[11px] tracking-[0.06em] text-muted">
+                {FOUNDER.role.toUpperCase()}
+              </p>
+              <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <dt className="font-mono text-[10.5px] text-muted">STUDIED</dt>
+                  <dd className="mt-1 font-sans text-[14px] font-semibold text-navy">
+                    {FOUNDER.degree}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[10.5px] text-muted">COLLEGE · YEAR</dt>
+                  <dd className="mt-1 font-sans text-[14px] font-semibold text-navy">
+                    {FOUNDER.college}, {FOUNDER.year}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[10.5px] text-muted">EMAIL</dt>
+                  <dd className="mt-1 font-sans text-[14px] font-semibold">
+                    <a className="break-all text-navy hover:underline" href={`mailto:${FOUNDER.email}`}>
+                      {FOUNDER.email}
+                    </a>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-mono text-[10.5px] text-muted">PHONE</dt>
+                  <dd className="mt-1 font-sans text-[14px] font-semibold">
+                    <a className="text-navy hover:underline" href={`tel:${CONTACT_PHONE_E164}`}>
+                      {FOUNDER.phone}
+                    </a>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+          <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(founderJsonLd())} />
+        </Container>
+      </section>
+
+      {/* Merged from the old /contact page, which now 301s to this anchor. */}
+      <section id="contact" className="scroll-mt-20 bg-off-white">
+        <Container className="grid gap-10 py-14 lg:grid-cols-[1fr_1fr]">
+          <div>
+            <p className="font-mono text-[11px] tracking-[0.06em] text-teal-dark">
+              CONTACT&nbsp;&nbsp;•&nbsp;&nbsp;REPLIES IN 1 BUSINESS DAY
+            </p>
+            <h2 className="mt-4 font-sans text-[32px] font-extrabold leading-[1.05] text-navy md:text-[42px]">
+              Talk to a human about a car file.
+            </h2>
+            <p className="mt-4 max-w-[480px] font-sans text-[15px] leading-relaxed text-muted">
+              Questions on an inspection ID, a document check or listing approval — send
+              the file number and we&apos;ll pull the dossier.
+            </p>
+            <dl className="mt-9 grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3 max-w-[900px]">
+              {[
+                ['Email', CONTACT_EMAIL],
+                ['Phone · 10–7 IST', CONTACT_PHONE],
+                ['Yard by appointment', 'CV Raman Nagar,\nBangalore'],
+              ].map(([k, v]) => (
+                <div key={k} className="min-w-0 border border-line bg-white p-4">
+                  <dt className="font-mono text-[10.5px] text-muted">{k.toUpperCase()}</dt>
+                  <dd className="mt-1 break-words whitespace-pre-line font-sans text-[12px] font-bold leading-relaxed text-navy sm:text-[13px]">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <ContactForm />
         </Container>
       </section>
     </>

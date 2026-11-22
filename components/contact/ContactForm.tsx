@@ -36,7 +36,7 @@ export function ContactForm() {
     })();
   }, []);
 
-  // Prefill from dossier fallback: /contact?inspectionId=AF-...
+  // Prefill from dossier fallback: /about?inspectionId=AF-...#contact
   useEffect(() => {
     try {
       const q = new URLSearchParams(window.location.search);

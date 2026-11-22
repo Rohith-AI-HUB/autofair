@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // /contact merged into /about. The URL is in Google's sitemap history and in old
+  // shared links, and the dossier fallback link used /contact?inspectionId=…, which
+  // Next carries over automatically — so it redirects instead of 404ing.
+  async redirects() {
+    return [{ source: '/contact', destination: '/about#contact', permanent: true }];
+  },
   async headers() {
     return [
       {

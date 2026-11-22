@@ -13,7 +13,6 @@ const PUBLIC_PATHS: { path: string; priority: number; changeFrequency: 'daily' |
   { path: 'inspection', priority: 0.7, changeFrequency: 'monthly' },
   { path: 'how-it-works', priority: 0.6, changeFrequency: 'monthly' },
   { path: 'about', priority: 0.5, changeFrequency: 'monthly' },
-  { path: 'contact', priority: 0.5, changeFrequency: 'monthly' },
   { path: 'privacy-policy', priority: 0.3, changeFrequency: 'monthly' },
   { path: 'terms', priority: 0.3, changeFrequency: 'monthly' },
 ];

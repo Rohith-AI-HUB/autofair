@@ -36,7 +36,7 @@ export function AuthExperience() {
             SOC2&nbsp;&nbsp;•&nbsp;&nbsp;GOOGLE OAUTH
           </p>
           <Link
-            href="/contact"
+            href="/about#contact"
             className="font-sans text-[13px] font-semibold text-navy hover:underline"
           >
             Need help? Contact support →

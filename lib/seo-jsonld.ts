@@ -1,7 +1,7 @@
 import type { Car } from '@/types';
 import { carTitle } from '@/lib/data/car-names';
 import { formatKm } from '@/lib/data/cars';
-import { CONTACT_EMAIL, CONTACT_PHONE, SITE_NAME, SITE_URL, absoluteUrl } from '@/lib/seo';
+import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_E164, FOUNDER, SITE_NAME, SITE_URL, absoluteUrl } from '@/lib/seo';
 
 /**
  * JSON-LD builders. Rule: only emit properties backed by a real column. That is
@@ -102,6 +102,7 @@ export function organizationJsonLd() {
     logo: absoluteUrl('/opengraph-image'),
     email: CONTACT_EMAIL,
     telephone: CONTACT_PHONE,
+    founder: { '@id': `${SITE_URL}/#founder` },
     foundingDate: '2026',
     description:
       'AutoFair publishes the inspection file, documents and disclosed history of every used car it lists, before a buyer calls the seller.',
@@ -109,6 +110,29 @@ export function organizationJsonLd() {
       { '@type': 'City', name: 'Bengaluru' },
       { '@type': 'City', name: 'Chitradurga' },
     ],
+  };
+}
+
+export function founderJsonLd() {
+  return {
+    '@id': `${SITE_URL}/#founder`,
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: FOUNDER.name,
+    image: absoluteUrl('/founder-keerthivanth.jpg'),
+    jobTitle: FOUNDER.role,
+    email: `mailto:${FOUNDER.email}`,
+    telephone: CONTACT_PHONE_E164,
+    alumniOf: {
+      '@type': 'CollegeOrUniversity',
+      name: FOUNDER.college,
+    },
+    hasCredential: {
+      '@type': 'EducationalOccupationalCredential',
+      credentialCategory: 'degree',
+      name: FOUNDER.degree,
+    },
+    worksFor: { '@id': `${SITE_URL}/#organization` },
   };
 }
 

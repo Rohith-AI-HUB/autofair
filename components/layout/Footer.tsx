@@ -36,7 +36,7 @@ export function Footer() {
             <p className="font-mono text-[11px] tracking-[0.08em] text-teal-bright">COMPANY</p>
             <ul className="mt-4 space-y-2.5 font-sans text-[13.5px] text-[#D6E2EC]">
               <li><Link className="hover:text-white" href="/about">About</Link></li>
-              <li><Link className="hover:text-white" href="/contact">Contact</Link></li>
+              <li><Link className="hover:text-white" href="/about#contact">Contact</Link></li>
             </ul>
           </nav>
 

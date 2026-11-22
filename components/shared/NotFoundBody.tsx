@@ -26,7 +26,7 @@ export function NotFoundBody() {
         </Link>
         <Link
           className="border border-line bg-white px-4 py-2 font-sans text-[13px] font-bold text-navy"
-          href="/contact"
+          href="/about#contact"
         >
           Talk to a human
         </Link>
