@@ -174,7 +174,10 @@ export function SellForm() {
   function validate() {
     const e: Partial<Record<keyof Fields | 'photos', string>> = {};
     if (!f.reg.trim()) e.reg = 'Registration number is required.';
+    // Four live rows were saved with a year in `make`, which put the year in the Make
+    // filter and doubled it in the title ('2014 2014 BMW 520d').
     if (!f.make.trim()) e.make = 'Make is required.';
+    else if (/^(19|20)\d{2}$/.test(f.make.trim())) e.make = 'Make is the brand, e.g. Hyundai. The year goes in YEAR.';
     if (!f.model.trim()) e.model = 'Model is required.';
     if (!f.year.trim()) e.year = 'Year is required.';
     else if (!/^(19|20)\d{2}$/.test(f.year.trim())) e.year = 'Use YYYY, e.g. 2021.';

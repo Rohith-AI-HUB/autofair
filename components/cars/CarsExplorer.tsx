@@ -19,21 +19,28 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'score-desc', label: 'Highest score' },
 ];
 
-const baseMakes = ['All', 'Hyundai', 'Maruti', 'Honda', 'Tata', 'Kia'];
 const fuels = ['All', 'Petrol', 'Diesel', 'CNG', 'Electric', 'Hybrid'];
 const transmissions = ['All', 'Manual', 'Automatic', 'AMT', 'CVT'];
-const baseCities = ['All', ...Array.from(new Set(seedCars.map((c) => c.location)))];
 const priceBands = [
   { label: 'All prices', min: 0, max: Infinity },
   { label: 'Under ₹8L', min: 0, max: 800000 },
   { label: '₹8–11L', min: 800000, max: 1100000 },
   { label: 'Above ₹11L', min: 1100000, max: Infinity },
 ];
-const yearBands = [
-  { label: 'All years', min: 0 },
-  { label: '2021+', min: 2021 },
-  { label: '2022+', min: 2022 },
-];
+
+/** Facet options come from the inventory on screen, so none of them can dead-end. */
+function facetLabels(values: (string | number)[], dropBareYear = false): string[] {
+  const seen = new Map<string, string>();
+  for (const raw of values) {
+    const label = String(raw).trim();
+    const key = label.toLowerCase();
+    // Sellers have typed a year into the make box ('2014' + model 'BMW 520d').
+    // A year is not a brand, so it must not be offered as one.
+    if (!key || (dropBareYear && /^\d{4}$/.test(key))) continue;
+    if (!seen.has(key)) seen.set(key, label);
+  }
+  return ['All', ...[...seen.values()].sort((a, b) => a.localeCompare(b))];
+}
 
 export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
   // The page server-renders the live rows, so first paint (server + client)
@@ -51,22 +58,13 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
       return true;
     });
   }, [liveCars]);
-  const makes = useMemo(() => {
-    // Dedupe case-insensitively: "Kia" (seed) + "KIA" (user typed) must be one pill.
-    const seen = new Map<string, string>();
-    for (const m of [...baseMakes.slice(1), ...cars.map((c) => c.make)]) {
-      const k = m.trim().toLowerCase();
-      if (!seen.has(k)) seen.set(k, m.trim());
-    }
-    return ['All', ...seen.values()];
-  }, [cars]);
-  const cities = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const m of [...baseCities.slice(1), ...cars.map((c) => c.location)]) {
-      const k = m.trim().toLowerCase();
-      if (k && !seen.has(k)) seen.set(k, m.trim());
-    }
-    return ['All', ...seen.values()];
+  const makes = useMemo(() => facetLabels(cars.map((c) => c.make), true), [cars]);
+  const cities = useMemo(() => facetLabels(cars.map((c) => c.location)), [cars]);
+  const years = useMemo(() => {
+    const seen = new Set<number>();
+    for (const c of cars) if (Number.isFinite(c.year)) seen.add(c.year);
+    // Newest first, to match the default sort of the results list.
+    return ['All years', ...[...seen].sort((a, b) => b - a).map(String)];
   }, [cars]);
   const [query, setQuery] = useState('');
   const [make, setMake] = useState('All');
@@ -104,20 +102,22 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
     };
   }, []);
   const [priceIdx, setPriceIdx] = useState(0);
-  const [yearIdx, setYearIdx] = useState(0);
+  // The year list is derived, so selection is held by label: an index would shift
+  // under the user when the live rows replace the first paint.
+  const [yearSel, setYearSel] = useState('All years');
   const [sort, setSort] = useState<SortKey>('newest');
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const band = priceBands[priceIdx];
-    const yb = yearBands[yearIdx];
+    const year = yearSel === 'All years' ? null : Number(yearSel);
     let list = cars.filter((c) => {
       if (make !== 'All' && c.make.trim().toLowerCase() !== make.trim().toLowerCase()) return false;
       if (fuel !== 'All' && c.fuel !== fuel) return false;
       if (gear !== 'All' && c.transmission !== gear) return false;
       if (city !== 'All' && c.location.trim().toLowerCase() !== city.trim().toLowerCase()) return false;
       if (c.price < band.min || c.price > band.max) return false;
-      if (c.year < yb.min) return false;
+      if (year !== null && c.year !== year) return false;
       if (q) {
         const hay = `${c.year} ${c.make} ${c.model} ${c.variant} ${c.location} ${c.inspectionId}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -141,7 +141,7 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
         list = [...list].sort((a, b) => b.year - a.year);
     }
     return list;
-  }, [cars, query, make, fuel, gear, city, priceIdx, yearIdx, sort]);
+  }, [cars, query, make, fuel, gear, city, priceIdx, yearSel, sort]);
 
   const filterBar = (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border border-line bg-white p-5">
@@ -158,10 +158,10 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
       />
       <FilterDropdown
         label="Year"
-        options={yearBands.map((y) => y.label)}
-        value={yearBands[yearIdx].label}
-        defaultLabel={yearBands[0].label}
-        onChange={(l) => setYearIdx(Math.max(0, yearBands.findIndex((y) => y.label === l)))}
+        options={years}
+        value={yearSel}
+        defaultLabel={years[0]}
+        onChange={setYearSel}
       />
       <button
         type="button"
@@ -171,7 +171,7 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
           setGear('All');
           setCity('All');
           setPriceIdx(0);
-          setYearIdx(0);
+          setYearSel('All years');
         }}
         className="shrink-0 whitespace-nowrap border border-navy/30 bg-white px-5 py-2 font-sans text-[12.5px] font-bold text-navy hover:border-navy"
       >
@@ -245,7 +245,7 @@ export function CarsExplorer({ initialCars = [] }: { initialCars?: Car[] }) {
                   setGear('All');
                   setCity('All');
                   setPriceIdx(0);
-                  setYearIdx(0);
+                  setYearSel('All years');
                 }}
                 className="mt-4 bg-navy px-6 py-3 font-sans text-[13px] font-bold text-white"
               >
