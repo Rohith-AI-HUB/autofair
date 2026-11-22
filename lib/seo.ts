@@ -20,7 +20,7 @@ export const CONTACT_PHONE_E164 = CONTACT_PHONE.replace(/\s/g, '');
 // card and the Person JSON-LD both read this object, and `phone` is the same number the
 // site already publishes as CONTACT_PHONE — there is no second line to keep in step.
 export const FOUNDER = {
-  name: 'Keerthivanth',
+  name: 'Keerthivanth S',
   role: 'Founder',
   email: 'keerthi.kvs2003@gmail.com',
   degree: 'B.E, Electrical & Instrumentation Engineering',
